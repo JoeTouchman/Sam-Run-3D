@@ -42,7 +42,7 @@ const ROASTS = {
   bus: ['Hit by the Loop bus. At least it was on time for once.', 'Should’ve taken the bus instead of getting hit by it.'],
 };
 const GENERIC_ROASTS = ['She’s not texting back, bro.', 'Worse than your Rocket League ranked games.', 'Should’ve skipped the 4th White Claw.', 'The blondes at Cowell saw that.'];
-const PHONE_QUIPS = ['Got her Snap', 'Got the digits', 'She followed back!', 'She said “haha ok”', 'Hinge match!', 'Wingman came through'];
+const PHONE_QUIPS = ['Got her instagram!', 'She followed back!', 'Digits secured!', 'Got her number!'];
 const MILESTONES = [
   [250, 'Warming up'], [500, 'Cardio king'], [1000, 'Beast mode'], [1500, 'Down to Cowell Beach'],
   [2000, 'Protein shake overdose'], [3000, 'Supersonic legend'], [5000, 'Touch grass, Sam'],
