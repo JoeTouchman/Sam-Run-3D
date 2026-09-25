@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>Sam Run 3D</title>
+  <meta name="description" content="Sam Run 3D — the endless runner nobody asked for. Dodge banana slugs, the Loop bus and 8AM midterms across UCSC." />
+  <meta name="theme-color" content="#f49a7a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Sam Run 3D" />
+  <meta property="og:title" content="Sam Run 3D" />
+  <meta property="og:description" content="Run, Sam, run. Dodge banana slugs, the Loop bus and 8AM midterms." />
+  <meta property="og:image" content="/icon-512.png" />
+  <link rel="icon" href="/icon-192.png" />
+  <link rel="apple-touch-icon" href="/icon-192.png" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Nunito:wght@700;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/style.css" />
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="flash"></div>
+  <div id="drunkfx"></div>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div class="hud-left">
+      <div id="score" class="big">0</div>
+      <div id="mult" class="chip hidden">x2</div>
+    </div>
+    <div class="hud-right">
+      <div class="chip"><span class="ico">💪</span><span id="gains">0</span></div>
+      <div class="chip"><span class="ico">📱</span><span id="digits">0</span></div>
+      <button id="pauseBtn" class="icon-btn" aria-label="Pause">❚❚</button>
+    </div>
+    <div id="powers"></div>
+  </div>
+
+  <div id="toast"></div>
+
+  <!-- Loading -->
+  <div id="loading" class="screen">
+    <div class="title small">SAM RUN <span>3D</span></div>
+    <div class="bar"><div id="barFill"></div></div>
+    <div id="loadText">Loading Sam's pre-workout…</div>
+  </div>
+
+  <!-- Menu -->
+  <div id="menu" class="screen hidden">
+    <div class="top">
+      <div class="title">SAM RUN <span>3D</span></div>
+      <div class="sub">Cowell College · UC Santa Cruz</div>
+    </div>
+    <div class="bottom">
+      <div id="bestLine" class="best"></div>
+      <button id="playBtn" class="btn primary">TAP TO RUN</button>
+      <div class="how">
+        <div><b>Swipe</b> ⬅️ ➡️ switch lanes · ⬆️ jump · ⬇️ slide tackle</div>
+        <div class="legend">
+          <span>💪 gains</span><span>🥤 protein = shield</span><span>🍺 drunk mode</span><span>🚀 supersonic</span><span>📱 her number</span>
+        </div>
+      </div>
+      <button id="muteBtn" class="icon-btn corner" aria-label="Toggle sound">🔊</button>
+    </div>
+  </div>
+
+  <!-- Pause -->
+  <div id="pause" class="screen dim hidden">
+    <div class="panel">
+      <div class="title small">PAUSED</div>
+      <div class="sub">Sam is checking his Hinge.</div>
+      <button id="resumeBtn" class="btn primary">RESUME</button>
+      <button id="quitBtn" class="btn">MAIN MENU</button>
+    </div>
+  </div>
+
+  <!-- Game over -->
+  <div id="over" class="screen dim hidden">
+    <div class="panel">
+      <div class="title small">WIPED OUT</div>
+      <div id="roast" class="roast"></div>
+      <div class="stats">
+        <div><span>Score</span><b id="oScore">0</b></div>
+        <div><span>Distance</span><b id="oDist">0m</b></div>
+        <div><span>Gains</span><b id="oGains">0</b></div>
+        <div><span>Numbers</span><b id="oDigits">0</b></div>
+      </div>
+      <div id="newBest" class="newbest hidden">NEW PERSONAL RECORD 🏆</div>
+      <div id="oBest" class="best"></div>
+      <button id="againBtn" class="btn primary">RUN IT BACK</button>
+      <div class="row">
+        <button id="shareBtn" class="btn">SHARE</button>
+        <button id="menuBtn" class="btn">MENU</button>
+      </div>
+    </div>
+  </div>
+
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
