@@ -421,7 +421,13 @@ function buildPhone() {
       const gr = c.createLinearGradient(0, 0, 0, h);
       gr.addColorStop(0, '#ff5c8a'); gr.addColorStop(1, '#ffb347');
       c.fillStyle = gr; c.fillRect(0, 0, w, h);
-      c.font = '38px sans-serif'; c.textAlign = 'center'; c.fillText('💬', w / 2, h / 2 + 12);
+      // chat bubble with a heart
+      c.fillStyle = '#ffffff';
+      c.beginPath(); c.ellipse(w / 2, h / 2 - 4, 22, 17, 0, 0, 7); c.fill();
+      c.beginPath(); c.moveTo(w / 2 - 12, h / 2 + 8); c.lineTo(w / 2 - 18, h / 2 + 22); c.lineTo(w / 2 - 2, h / 2 + 11); c.fill();
+      c.fillStyle = '#ff5c8a';
+      c.beginPath(); c.arc(w / 2 - 5, h / 2 - 8, 5.5, 0, 7); c.arc(w / 2 + 5, h / 2 - 8, 5.5, 0, 7); c.fill();
+      c.beginPath(); c.moveTo(w / 2 - 10.5, h / 2 - 6); c.lineTo(w / 2, h / 2 + 5); c.lineTo(w / 2 + 10.5, h / 2 - 6); c.fill();
     }),
   }));
   screen.position.z = 0.04;

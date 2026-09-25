@@ -1,12 +1,16 @@
 import * as THREE from 'three';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
-import { Sfx, store } from './audio.js';
 import {
   LANE_W, LANES, PATH_W, GROUND_LEN, CHUNK,
   makePathTexture, makeGrassTexture, makeSky, buildChunk, buildArch, OBSTACLES, PICKUPS,
 } from './world.js';
 
 const $ = (id) => document.getElementById(id);
+const icon = (id) => `<svg class="ico"><use href="#i-${id}"/></svg>`;
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private mode */ } },
+};
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -18,7 +22,7 @@ const SPAWN_Z = -150;
 const DESPAWN_Z = 12;
 const GRAVITY = 36;
 const JUMP_V = 12;
-const SLIDE_TIME = 0.75;
+const SLIDE_TIME = 1.0;
 const START_SPEED = 13;
 const MAX_SPEED = 30;
 const INJURY_TIME = 6;
@@ -37,10 +41,18 @@ const ROASTS = {
   bus: ['Hit by the Loop bus. At least it was on time for once.', 'Should’ve taken the bus instead of getting hit by it.'],
 };
 const GENERIC_ROASTS = ['She’s not texting back, bro.', 'Worse than your Rocket League ranked games.', 'Should’ve skipped the 4th White Claw.', 'The blondes at Cowell saw that.'];
-const PHONE_QUIPS = ['Got her Snap 😎', 'Got the digits 📱', 'She followed back!', 'She said “haha ok”', 'Hinge match 💘', 'Wingman came through'];
+const PHONE_QUIPS = ['Got her Snap', 'Got the digits', 'She followed back!', 'She said “haha ok”', 'Hinge match!', 'Wingman came through'];
+const FLEXES = [
+  'Built by Joe, the greatest roommate in Cowell history.',
+  'Joe made you a whole video game. Take out the trash.',
+  'Coded by Joe between sets. Better at both, honestly.',
+  'Certified best roommate: Joe. Runner-up: nobody.',
+  'Joe built this from scratch. Sam built a mess in the kitchen.',
+  'Brought to you by Joe, handsome AND talented.',
+];
 const MILESTONES = [
-  [250, 'Warming up 🔥'], [500, 'Cardio king'], [1000, 'Beast mode 💪'], [1500, 'Down to Cowell Beach'],
-  [2000, 'Protein shake overdose'], [3000, 'Supersonic legend 🚀'], [5000, 'Touch grass, Sam'],
+  [250, 'Warming up'], [500, 'Cardio king'], [1000, 'Beast mode'], [1500, 'Down to Cowell Beach'],
+  [2000, 'Protein shake overdose'], [3000, 'Supersonic legend'], [5000, 'Touch grass, Sam'],
 ];
 
 // ---------- renderer / scene ----------
@@ -170,16 +182,35 @@ function setAnim(name, fade = 0.25) {
   currentAnim = name;
 }
 
-// Lock the hips' horizontal root motion so runs stay in place.
-function inPlace(clip) {
+// Mixamo has no "in place" option for these clips, so lock the hips' root motion here.
+// lockY also flattens the vertical lift (the jump's height comes from game physics instead).
+function inPlace(clip, lockY = false) {
   for (const t of clip.tracks) {
     if (/Hips\.position$/.test(t.name)) {
       const v = t.values;
-      const x0 = v[0], z0 = v[2];
-      for (let i = 0; i < v.length; i += 3) { v[i] = x0; v[i + 2] = z0; }
+      const [x0, y0, z0] = v;
+      for (let i = 0; i < v.length; i += 3) {
+        v[i] = x0;
+        v[i + 2] = z0;
+        if (lockY) v[i + 1] = y0;
+      }
     }
   }
   return clip;
+}
+
+// One-shot clips (jump, slide) restart every time they're triggered.
+function playOnce(name, timeScale, fade = 0.1) {
+  const a = actions[name];
+  if (!a) return;
+  a.reset();
+  a.timeScale = timeScale;
+  if (currentAnim !== name) {
+    a.setEffectiveWeight(1).fadeIn(fade);
+    if (currentAnim) actions[currentAnim].fadeOut(fade);
+    currentAnim = name;
+  }
+  a.play();
 }
 
 // ---------- loading ----------
@@ -191,6 +222,8 @@ const FILES = [
   ['injured', 'assets/anims/injured.fbx', 219184],
   ['drunk', 'assets/anims/drunk.fbx', 310048],
   ['dance', 'assets/anims/dance.fbx', 907072],
+  ['jump', 'assets/anims/jump.fbx', 242480],
+  ['slide', 'assets/anims/slide.fbx', 283040],
 ];
 const LOAD_LINES = ['Loading Sam’s pre-workout…', 'Hitting the gym…', 'Fixing his hair…', 'Texting the group chat…', 'Queueing Rocket League…', 'Stretching hamstrings…'];
 
@@ -228,11 +261,16 @@ async function load() {
   samInner.add(sam);
 
   mixer = new THREE.AnimationMixer(sam);
-  for (const key of ['run', 'fast', 'slow', 'injured', 'drunk', 'dance']) {
+  for (const key of ['run', 'fast', 'slow', 'injured', 'drunk', 'dance', 'jump', 'slide']) {
     const clip = byKey[key].animations[0];
     if (!clip) continue;
-    if (key !== 'dance') inPlace(clip);
-    actions[key] = mixer.clipAction(clip);
+    if (key !== 'dance') inPlace(clip, key === 'jump');
+    const a = mixer.clipAction(clip);
+    if (key === 'jump' || key === 'slide') {
+      a.setLoop(THREE.LoopOnce, 1);
+      a.clampWhenFinished = true;
+    }
+    actions[key] = a;
   }
 
   // Ground Sam using an animated pose — the T-pose rest skeleton sits at a different hip height.
@@ -254,7 +292,6 @@ let px = 0, py = 0, vy = 0;
 let grounded = true;
 let slideT = 0;
 let queuedSlide = false;
-let tilt = 0;
 let speed = 0;
 let distance = 0;
 let score = 0;
@@ -379,7 +416,7 @@ function spawnRow(z) {
 function resetRun() {
   for (let i = obstacles.length - 1; i >= 0; i--) recycle(obstacles, i);
   for (let i = pickups.length - 1; i >= 0; i--) recycle(pickups, i, 'p_');
-  lane = 1; px = 0; py = 0; vy = 0; grounded = true; slideT = 0; queuedSlide = false; tilt = 0;
+  lane = 1; px = 0; py = 0; vy = 0; grounded = true; slideT = 0; queuedSlide = false;
   speed = 0; distance = 0; score = 0; gains = 0; digits = 0; runTime = 0;
   injuredT = 0; invulnT = 0; shield = false; power.beer = 0; power.boost = 0;
   shake = 0; milestoneI = 0; sinceRow = 0; rowGap = 24; killer = null; sinceArch = 0;
@@ -418,14 +455,14 @@ function flashRed() {
 }
 function updatePowersHud() {
   const items = [];
-  if (power.boost > 0) items.push(['🚀', power.boost / POWER_TIME.boost]);
-  if (power.beer > 0) items.push(['🍺', power.beer / POWER_TIME.beer]);
-  if (shield) items.push(['🥤', 1]);
-  if (injuredT > 0) items.push(['🤕', injuredT / INJURY_TIME]);
+  if (power.boost > 0) items.push(['boost', power.boost / POWER_TIME.boost]);
+  if (power.beer > 0) items.push(['cup', power.beer / POWER_TIME.beer]);
+  if (shield) items.push(['shake', 1]);
+  if (injuredT > 0) items.push(['bandage', injuredT / INJURY_TIME]);
   const key = items.map((i) => i[0] + Math.round(i[1] * 40)).join();
   if (lastHud.powers === key) return;
   lastHud.powers = key;
-  $('powers').innerHTML = items.map(([ico, f]) => `<div class="power">${ico}<div class="t"><i style="width:${(f * 100).toFixed(0)}%"></i></div></div>`).join('');
+  $('powers').innerHTML = items.map(([ico, f]) => `<div class="power">${icon(ico)}<div class="t"><i style="width:${(f * 100).toFixed(0)}%"></i></div></div>`).join('');
 }
 
 function showScreen(id) {
@@ -434,18 +471,24 @@ function showScreen(id) {
 }
 
 // ---------- input ----------
+function startSlide() {
+  slideT = SLIDE_TIME;
+  playOnce('slide', actions.slide ? actions.slide.getClip().duration / SLIDE_TIME : 1, 0.08);
+}
+
 function act(a) {
   if (state !== 'run') return;
   if (power.beer > 0 && (a === 'left' || a === 'right')) a = a === 'left' ? 'right' : 'left';
-  if (a === 'left' && lane > 0) { prevLane = lane; lane--; Sfx.lane(); }
-  else if (a === 'right' && lane < 2) { prevLane = lane; lane++; Sfx.lane(); }
+  if (a === 'left' && lane > 0) { prevLane = lane; lane--; }
+  else if (a === 'right' && lane < 2) { prevLane = lane; lane++; }
   else if (a === 'up') {
     if (grounded) {
-      vy = JUMP_V; grounded = false; slideT = 0; queuedSlide = false; Sfx.jump();
+      vy = JUMP_V; grounded = false; slideT = 0; queuedSlide = false;
+      playOnce('jump', actions.jump ? actions.jump.getClip().duration / (2 * JUMP_V / GRAVITY) : 1);
     }
   } else if (a === 'down') {
     if (!grounded) { vy = -24; queuedSlide = true; }
-    else { slideT = SLIDE_TIME; Sfx.slide(); }
+    else startSlide();
   }
 }
 
@@ -464,7 +507,6 @@ window.addEventListener('keydown', (e) => {
 
 let touch = null;
 window.addEventListener('touchstart', (e) => {
-  Sfx.unlock();
   const t = e.changedTouches[0];
   touch = { x: t.clientX, y: t.clientY, done: false };
 }, { passive: true });
@@ -482,7 +524,7 @@ window.addEventListener('touchend', () => { touch = null; }, { passive: true });
 
 // mouse drag swipes for desktop testing
 let mouse = null;
-window.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') { Sfx.unlock(); mouse = { x: e.clientX, y: e.clientY, done: false }; } });
+window.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') { mouse = { x: e.clientX, y: e.clientY, done: false }; } });
 window.addEventListener('pointermove', (e) => {
   if (!mouse || mouse.done || e.pointerType !== 'mouse') return;
   const dx = e.clientX - mouse.x, dy = e.clientY - mouse.y;
@@ -493,16 +535,14 @@ window.addEventListener('pointermove', (e) => {
 });
 window.addEventListener('pointerup', () => { mouse = null; });
 
-$('playBtn').addEventListener('click', () => { Sfx.unlock(); startGame(); });
-$('againBtn').addEventListener('click', () => { Sfx.unlock(); startGame(); });
+$('playBtn').addEventListener('click', () => { startGame(); });
+$('againBtn').addEventListener('click', () => { startGame(); });
 $('menuBtn').addEventListener('click', () => toMenu());
 $('quitBtn').addEventListener('click', () => toMenu());
 $('pauseBtn').addEventListener('click', () => togglePause());
 $('resumeBtn').addEventListener('click', () => togglePause());
-$('muteBtn').addEventListener('click', () => { Sfx.unlock(); $('muteBtn').textContent = Sfx.toggle() ? '🔇' : '🔊'; });
-$('muteBtn').textContent = Sfx.muted ? '🔇' : '🔊';
 $('shareBtn').addEventListener('click', async () => {
-  const text = `I scored ${Math.floor(score)} in Sam Run 3D 🏃‍♂️💪 (${Math.floor(distance)}m, ${digits} numbers). Beat that.`;
+  const text = `I scored ${Math.floor(score)} in Sam Run 3D (${Math.floor(distance)}m, ${digits} numbers). Beat that.`;
   try {
     if (navigator.share) await navigator.share({ title: 'Sam Run 3D', text, url: location.href });
     else { await navigator.clipboard.writeText(`${text} ${location.href}`); toast('Copied!', 'Send it to the group chat'); }
@@ -516,8 +556,8 @@ function togglePause() {
 }
 
 // ---------- flow ----------
-const MENU_CAM = new THREE.Vector3(0.7, 1.35, 3.5);
-const MENU_LOOK = new THREE.Vector3(0, 1.05, 0);
+const MENU_CAM = new THREE.Vector3(0.7, 1.25, 4.0);
+const MENU_LOOK = new THREE.Vector3(0, 0.55, 0);
 const camLook = new THREE.Vector3();
 
 function toMenu() {
@@ -527,6 +567,7 @@ function toMenu() {
   for (let i = pickups.length - 1; i >= 0; i--) recycle(pickups, i, 'p_');
   setAnim('dance', 0.4);
   player.rotation.y = Math.PI; // face the camera while dancing
+  $('flex').textContent = pick(FLEXES);
   $('bestLine').textContent = best ? `Personal record: ${best.toLocaleString()}` : 'Cowell’s finest. Allegedly.';
   $('drunkfx').classList.remove('on');
   showScreen('menu');
@@ -543,7 +584,7 @@ function startGame() {
 function gameOver() {
   state = 'dying';
   dyingT = 0;
-  Sfx.over();
+ 
   if (navigator.vibrate) navigator.vibrate([60, 40, 120]);
   const pool = ROASTS[killer] ? [...ROASTS[killer], ...GENERIC_ROASTS.slice(0, 1)] : GENERIC_ROASTS;
   $('roast').textContent = pick(pool);
@@ -566,7 +607,7 @@ function hit(o) {
     if (power.boost <= 0) { shield = false; toast('SHIELD POPPED', 'Protein saved you'); invulnT = 0.8; }
     return;
   }
-  Sfx.hit();
+ 
   shake = 0.5;
   flashRed();
   killer = o.type;
@@ -589,7 +630,7 @@ function smash(o) {
   o.dead = true;
   o.fly = { vy: rand(7, 10), vx: (o.x >= px ? 1 : -1) * rand(4, 8), spin: rand(-8, 8) };
   score += 50 * (power.beer > 0 ? 2 : 1);
-  Sfx.smash();
+ 
   shake = 0.2;
 }
 
@@ -597,15 +638,15 @@ function collect(p) {
   p.taken = true;
   const mult = power.beer > 0 ? 2 : 1;
   switch (p.type) {
-    case 'gains': gains++; score += 10 * mult; Sfx.coin(); break;
-    case 'beer': power.beer = POWER_TIME.beer; Sfx.power(); toast('DRUNK MODE 🍺', '2x points · controls reversed'); $('drunkfx').classList.add('on'); break;
-    case 'boost': power.boost = POWER_TIME.boost; Sfx.power(); toast('SUPERSONIC 🚀', 'Smash through everything'); break;
+    case 'gains': gains++; score += 10 * mult; break;
+    case 'beer': power.beer = POWER_TIME.beer; toast(`${icon('cup')} DRUNK MODE`, '2x points · controls reversed'); $('drunkfx').classList.add('on'); break;
+    case 'boost': power.boost = POWER_TIME.boost; toast(`${icon('boost')} SUPERSONIC`, 'Smash through everything'); break;
     case 'shake':
-      Sfx.power();
-      if (injuredT > 0) { injuredT = 0; toast('PROTEIN SHAKE 🥤', 'Fully healed. Gains restored'); }
-      else { shield = true; toast('PROTEIN SHAKE 🥤', 'Shield up'); }
+     
+      if (injuredT > 0) { injuredT = 0; toast(`${icon('shake')} PROTEIN SHAKE`, 'Fully healed. Gains restored'); }
+      else { shield = true; toast(`${icon('shake')} PROTEIN SHAKE`, 'Shield up'); }
       break;
-    case 'phone': digits++; score += 250 * mult; Sfx.phone(); toast(pick(PHONE_QUIPS), `+${250 * mult}`); break;
+    case 'phone': digits++; score += 250 * mult; toast(`${icon('phone')} ${pick(PHONE_QUIPS)}`, `+${250 * mult}`); break;
   }
 }
 
@@ -687,26 +728,25 @@ function update(dt) {
       py = 0; vy = 0;
       if (!grounded) {
         grounded = true;
-        if (queuedSlide) { queuedSlide = false; slideT = SLIDE_TIME; Sfx.slide(); }
+        if (queuedSlide) { queuedSlide = false; startSlide(); }
       }
     }
     slideT = Math.max(0, slideT - dt);
-    tilt = damp(tilt, slideT > 0 ? 1.25 : 0, 18, dt);
     player.position.set(px, py, 0);
-    player.rotation.x = tilt;
+    player.rotation.x = 0;
     player.rotation.y = state === 'intro' ? Math.PI * (1 - THREE.MathUtils.smoothstep(introT / 1.0, 0, 1)) : 0;
     player.rotation.z = damp(player.rotation.z, (tx - px) * -0.08, 10, dt);
   }
 
   // --- timers ---
   invulnT = Math.max(0, invulnT - dt);
-  if (injuredT > 0) { injuredT -= dt; if (injuredT <= 0 && state === 'run') toast('Walked it off 💪'); }
+  if (injuredT > 0) { injuredT -= dt; if (injuredT <= 0 && state === 'run') toast('Walked it off'); }
   if (power.boost > 0) power.boost = Math.max(0, power.boost - dt);
   if (power.beer > 0) { power.beer = Math.max(0, power.beer - dt); if (power.beer === 0) $('drunkfx').classList.remove('on'); }
-  samInner.visible = invulnT > 0 && power.boost <= 0 && !shield ? Math.floor(invulnT * 12) % 2 === 0 : true;
+  samInner.visible = invulnT > 0 && invulnT < 10 && power.boost <= 0 && !shield ? Math.floor(invulnT * 12) % 2 === 0 : true;
 
   // --- animation choice ---
-  if (state === 'run' || state === 'intro') {
+  if ((state === 'run' || state === 'intro') && grounded && slideT <= 0) {
     let anim = 'run';
     if (power.boost > 0) anim = 'fast';
     else if (injuredT > 0) anim = 'injured';
@@ -715,7 +755,7 @@ function update(dt) {
     else if (speed > 23) anim = 'fast';
     setAnim(anim);
     const a = actions[currentAnim];
-    if (a) a.timeScale = clamp(speed / (ANIM_REF_SPEED[currentAnim] || 14), 0.75, 1.5) * (grounded ? 1 : 0.6);
+    if (a) a.timeScale = clamp(speed / (ANIM_REF_SPEED[currentAnim] || 14), 0.75, 1.5);
   }
 
   // --- effects ---
@@ -844,4 +884,4 @@ load().then(async () => {
 });
 
 // debug handle for testing in the browser console
-window.__samrun = { player, samInner, camera, scene, act, get state() { return state; }, get speed() { return speed; }, obstacles, pickups, setGod(v) { invulnT = v ? 1e9 : 0; }, give(type) { collect({ type }); } };
+window.__samrun = { player, samInner, camera, scene, act, get state() { return state; }, get speed() { return speed; }, obstacles, pickups, setGod(v) { invulnT = v ? 1e9 : 0; }, give(type) { collect({ type }); }, step(n = 1) { for (let i = 0; i < n; i++) update(1 / 60); renderer.render(scene, camera); } };

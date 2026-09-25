@@ -7,14 +7,14 @@ Plain static site: three.js from a CDN, no build step. Hosted on Vercel at sam.j
 ## Controls
 - Swipe left/right (or arrow keys / A-D): switch lanes
 - Swipe up (or up / W / space): jump
-- Swipe down (or down / S): slide tackle (fast-drop in the air)
+- Swipe down (or down / S): slide (fast-drop in the air)
 
 ## Pickups
-- 💪 Dumbbells: gains (+10)
-- 🥤 Protein shake: shield, or heals an injury
-- 🍺 Solo cup: drunk mode, 2x points, reversed controls
-- 🚀 Boost orb: supersonic, smash through everything
-- 📱 Phone: got her number (+250)
+- Dumbbells: gains (+10)
+- Protein shake: shield, or heals an injury
+- Solo cup: drunk mode, 2x points, reversed controls
+- Boost orb: supersonic, smash through everything
+- Phone: got her number (+250)
 
 A hit leaves Sam injured for a few seconds. A second hit while injured, or running into the front of a bus, ends the run.
 

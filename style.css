@@ -90,19 +90,28 @@ html, body {
 #playBtn { animation: pulse 1.2s ease-in-out infinite; }
 @keyframes pulse { 50% { transform: scale(1.05); } }
 
-.how { font-size: 13px; font-weight: 700; background: rgba(27,16,48,.55); border-radius: 14px; padding: 10px 12px; line-height: 1.5; }
-.legend { display: flex; flex-wrap: wrap; gap: 4px 10px; justify-content: center; margin-top: 4px; opacity: .9; }
+.credit {
+  display: flex; align-items: center; gap: 10px; text-align: left;
+  background: rgba(27,16,48,.6); border: 2px solid rgba(255,201,51,.5);
+  border-radius: 16px; padding: 10px 14px; max-width: 340px;
+}
+.credit .crown { width: 34px; height: 34px; flex: none; animation: bob 2.4s ease-in-out infinite; }
+.credit-top { font-family: 'Luckiest Guy', sans-serif; color: var(--gold); font-size: 17px; letter-spacing: 1px; line-height: 1; }
+.credit-line { font-weight: 800; font-size: 13px; line-height: 1.35; margin-top: 3px; }
+@keyframes bob { 50% { transform: translateY(-3px) rotate(-6deg); } }
+
+.ico { width: 1em; height: 1em; display: inline-block; vertical-align: -0.12em; flex: none; }
 
 .icon-btn {
   width: 44px; height: 44px; border-radius: 12px;
   border: 2px solid rgba(255,255,255,.7);
   background: rgba(27,16,48,.5);
   color: var(--cream);
-  font-size: 16px; font-weight: 900;
+  font-size: 18px; font-weight: 900;
+  display: flex; align-items: center; justify-content: center; padding: 0;
   cursor: pointer;
   touch-action: manipulation;
 }
-.icon-btn.corner { position: absolute; right: 0; top: -56px; }
 
 .panel {
   background: var(--panel);
@@ -124,7 +133,8 @@ html, body {
 .stats div { background: rgba(255,255,255,.08); border-radius: 12px; padding: 8px; display: flex; flex-direction: column; }
 .stats span { font-size: 12px; opacity: .75; font-weight: 700; }
 .stats b { font-family: 'Luckiest Guy', sans-serif; font-size: 26px; letter-spacing: 1px; font-weight: 400; }
-.newbest { font-family: 'Luckiest Guy', sans-serif; color: var(--gold); font-size: 20px; animation: pulse .8s infinite; }
+.newbest { font-family: 'Luckiest Guy', sans-serif; color: var(--gold); font-size: 20px; animation: pulse .8s infinite; display: flex; align-items: center; gap: 6px; }
+.newbest .ico { width: 26px; height: 26px; }
 
 /* ---------- HUD ---------- */
 #hud {
@@ -145,10 +155,11 @@ html, body {
   font-family: 'Luckiest Guy', sans-serif; font-size: 18px; letter-spacing: .5px;
   display: flex; gap: 5px; align-items: center; height: 36px;
 }
-.chip .ico { font-size: 16px; }
+.chip .ico { width: 22px; height: 22px; }
 #mult { background: var(--pink); }
 #powers { position: absolute; left: 12px; top: calc(110px + var(--safe-top)); display: flex; flex-direction: column; gap: 6px; }
-.power { display: flex; align-items: center; gap: 6px; background: rgba(27,16,48,.6); border-radius: 99px; padding: 4px 10px 4px 6px; font-size: 18px; }
+.power { display: flex; align-items: center; gap: 6px; background: rgba(27,16,48,.6); border-radius: 99px; padding: 4px 10px 4px 6px; }
+.power .ico { width: 24px; height: 24px; }
 .power .t { width: 64px; height: 7px; border-radius: 99px; background: rgba(255,255,255,.2); overflow: hidden; }
 .power .t i { display: block; height: 100%; background: var(--gold); }
 
@@ -161,6 +172,7 @@ html, body {
   text-align: center; width: 92vw; opacity: 0;
 }
 #toast.show { animation: toast 1.6s ease-out forwards; }
+#toast .ico { width: 1.1em; height: 1.1em; vertical-align: -0.18em; }
 #toast small { display: block; font-family: 'Nunito', sans-serif; font-weight: 900; font-size: 16px; -webkit-text-stroke: 0; text-shadow: 0 2px 4px rgba(0,0,0,.6); margin-top: 4px; }
 @keyframes toast {
   0% { opacity: 0; transform: translate(-50%, -30%) scale(.6); }
