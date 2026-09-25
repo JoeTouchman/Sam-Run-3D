@@ -96,8 +96,7 @@ html, body {
   border-radius: 16px; padding: 10px 14px; max-width: 340px;
 }
 .credit .crown { width: 34px; height: 34px; flex: none; animation: bob 2.4s ease-in-out infinite; }
-.credit-top { font-family: 'Luckiest Guy', sans-serif; color: var(--gold); font-size: 17px; letter-spacing: 1px; line-height: 1; }
-.credit-line { font-weight: 800; font-size: 13px; line-height: 1.35; margin-top: 3px; }
+.credit-line { font-family: 'Luckiest Guy', sans-serif; color: var(--gold); font-size: 18px; letter-spacing: .5px; line-height: 1.1; padding-top: 3px; }
 @keyframes bob { 50% { transform: translateY(-3px) rotate(-6deg); } }
 
 .ico { width: 1em; height: 1em; display: inline-block; vertical-align: -0.12em; flex: none; }

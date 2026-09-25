@@ -42,14 +42,6 @@ const ROASTS = {
 };
 const GENERIC_ROASTS = ['She’s not texting back, bro.', 'Worse than your Rocket League ranked games.', 'Should’ve skipped the 4th White Claw.', 'The blondes at Cowell saw that.'];
 const PHONE_QUIPS = ['Got her Snap', 'Got the digits', 'She followed back!', 'She said “haha ok”', 'Hinge match!', 'Wingman came through'];
-const FLEXES = [
-  'Built by Joe, the greatest roommate in Cowell history.',
-  'Joe made you a whole video game. Take out the trash.',
-  'Coded by Joe between sets. Better at both, honestly.',
-  'Certified best roommate: Joe. Runner-up: nobody.',
-  'Joe built this from scratch. Sam built a mess in the kitchen.',
-  'Brought to you by Joe, handsome AND talented.',
-];
 const MILESTONES = [
   [250, 'Warming up'], [500, 'Cardio king'], [1000, 'Beast mode'], [1500, 'Down to Cowell Beach'],
   [2000, 'Protein shake overdose'], [3000, 'Supersonic legend'], [5000, 'Touch grass, Sam'],
@@ -567,7 +559,6 @@ function toMenu() {
   for (let i = pickups.length - 1; i >= 0; i--) recycle(pickups, i, 'p_');
   setAnim('dance', 0.4);
   player.rotation.y = Math.PI; // face the camera while dancing
-  $('flex').textContent = pick(FLEXES);
   $('bestLine').textContent = best ? `Personal record: ${best.toLocaleString()}` : 'Cowell’s finest. Allegedly.';
   $('drunkfx').classList.remove('on');
   showScreen('menu');
