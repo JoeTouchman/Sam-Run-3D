@@ -191,3 +191,20 @@ html, body {
 }
 #drunkfx.on { opacity: 1; animation: drunkpulse 2s ease-in-out infinite; }
 @keyframes drunkpulse { 50% { filter: hue-rotate(40deg); } }
+
+/* ---------- sound controls ---------- */
+.sound {
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(27,16,48,.6); border-radius: 99px; padding: 4px 16px 4px 4px;
+  width: 100%; max-width: 260px;
+}
+.sound .icon-btn { width: 38px; height: 38px; border-radius: 99px; flex: none; }
+.snd-vol {
+  -webkit-appearance: none; appearance: none; flex: 1; height: 28px; background: transparent; margin: 0; touch-action: none;
+}
+.snd-vol::-webkit-slider-runnable-track { height: 8px; border-radius: 99px; background: linear-gradient(90deg, var(--gold) var(--fill, 80%), rgba(255,255,255,.25) var(--fill, 80%)); }
+.snd-vol::-moz-range-track { height: 8px; border-radius: 99px; background: rgba(255,255,255,.25); }
+.snd-vol::-moz-range-progress { height: 8px; border-radius: 99px; background: var(--gold); }
+.snd-vol::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; margin-top: -7px; border-radius: 50%; background: var(--cream); border: 3px solid var(--ink); }
+.snd-vol::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--cream); border: 3px solid var(--ink); }
+.sound.off .snd-vol { opacity: .45; }

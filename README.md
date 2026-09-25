@@ -12,7 +12,7 @@ Plain static site: three.js from a CDN, no build step. Hosted on Vercel at sam.j
 ## Pickups
 - Dumbbells: gains (+10)
 - Protein shake: shield, or heals an injury
-- Solo cup: drunk mode, 2x points, reversed controls
+- Solo cup: drunk mode, 2x points
 - Boost orb: supersonic, smash through everything
 - Phone: got her number (+250)
 

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { Sound } from './audio.js';
 import {
   LANE_W, LANES, PATH_W, GROUND_LEN, CHUNK,
   makePathTexture, makeGrassTexture, makeSky, buildChunk, buildArch, OBSTACLES, PICKUPS,
@@ -303,6 +304,7 @@ let sinceRow = 0;
 let sinceArch = 0;
 let best = store.get('samrun.best', 0);
 let killer = null;
+let celebrate = false;
 
 const obstacles = [];
 const pickups = [];
@@ -465,17 +467,18 @@ function showScreen(id) {
 // ---------- input ----------
 function startSlide() {
   slideT = SLIDE_TIME;
+  Sound.play('lane', { rate: 0.75 });
   playOnce('slide', actions.slide ? actions.slide.getClip().duration / SLIDE_TIME : 1, 0.08);
 }
 
 function act(a) {
   if (state !== 'run') return;
-  if (power.beer > 0 && (a === 'left' || a === 'right')) a = a === 'left' ? 'right' : 'left';
-  if (a === 'left' && lane > 0) { prevLane = lane; lane--; }
-  else if (a === 'right' && lane < 2) { prevLane = lane; lane++; }
+  if (a === 'left' && lane > 0) { prevLane = lane; lane--; Sound.play('lane'); }
+  else if (a === 'right' && lane < 2) { prevLane = lane; lane++; Sound.play('lane'); }
   else if (a === 'up') {
     if (grounded) {
       vy = JUMP_V; grounded = false; slideT = 0; queuedSlide = false;
+      Sound.play('jump');
       playOnce('jump', actions.jump ? actions.jump.getClip().duration / (2 * JUMP_V / GRAVITY) : 1);
     }
   } else if (a === 'down') {
@@ -496,6 +499,9 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'Enter' && (state === 'menu' || state === 'over')) startGame();
   if (k.startsWith('Arrow') || k === ' ') e.preventDefault();
 });
+
+// audio can only start after a user gesture
+for (const ev of ['touchstart', 'touchend', 'pointerdown', 'keydown', 'click']) window.addEventListener(ev, () => Sound.unlock(), { passive: true });
 
 let touch = null;
 window.addEventListener('touchstart', (e) => {
@@ -533,6 +539,23 @@ $('menuBtn').addEventListener('click', () => toMenu());
 $('quitBtn').addEventListener('click', () => toMenu());
 $('pauseBtn').addEventListener('click', () => togglePause());
 $('resumeBtn').addEventListener('click', () => togglePause());
+// mute button + volume slider (menu and pause screen share state)
+function syncSoundUi() {
+  for (const el of document.querySelectorAll('.sound')) {
+    const off = Sound.muted || Sound.volume === 0;
+    el.classList.toggle('off', off);
+    el.querySelector('use').setAttribute('href', off ? '#i-mute' : '#i-sound');
+    const r = el.querySelector('.snd-vol');
+    r.value = Math.round(Sound.volume * 100);
+    r.style.setProperty('--fill', `${off ? 0 : r.value}%`);
+  }
+}
+for (const el of document.querySelectorAll('.sound')) {
+  el.querySelector('.snd-btn').addEventListener('click', () => { Sound.unlock(); Sound.toggleMute(); syncSoundUi(); });
+  el.querySelector('.snd-vol').addEventListener('input', (e) => { Sound.unlock(); Sound.setVolume(e.target.value / 100); syncSoundUi(); });
+}
+syncSoundUi();
+
 $('shareBtn').addEventListener('click', async () => {
   const text = `I scored ${Math.floor(score)} in Sam Run 3D (${Math.floor(distance)}m, ${digits} numbers). Beat that.`;
   try {
@@ -540,11 +563,11 @@ $('shareBtn').addEventListener('click', async () => {
     else { await navigator.clipboard.writeText(`${text} ${location.href}`); toast('Copied!', 'Send it to the group chat'); }
   } catch { /* cancelled */ }
 });
-document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'run') togglePause(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden && (state === 'run' || state === 'intro')) togglePause(); });
 
 function togglePause() {
-  if (state === 'run') { prevState = state; state = 'paused'; showScreen('pause'); }
-  else if (state === 'paused') { state = prevState || 'run'; showScreen(null); clock.getDelta(); }
+  if (state === 'run' || state === 'intro') { prevState = state; state = 'paused'; showScreen('pause'); Sound.music(null); Sound.boost(false); }
+  else if (state === 'paused') { state = prevState || 'run'; showScreen(null); clock.getDelta(); Sound.music('run'); if (power.boost > 0) Sound.boost(true); }
 }
 
 // ---------- flow ----------
@@ -561,6 +584,8 @@ function toMenu() {
   player.rotation.y = Math.PI; // face the camera while dancing
   $('bestLine').textContent = best ? `Personal record: ${best.toLocaleString()}` : 'Cowell’s finest. Allegedly.';
   $('drunkfx').classList.remove('on');
+  Sound.boost(false);
+  Sound.music('theme');
   showScreen('menu');
 }
 
@@ -569,19 +594,24 @@ function startGame() {
   state = 'intro';
   introT = 0;
   setAnim('slow', 0.35);
+  Sound.boost(false);
+  Sound.music('run', { restart: true });
   showScreen(null);
 }
 
 function gameOver() {
   state = 'dying';
   dyingT = 0;
- 
+  Sound.play('crash');
+  Sound.boost(false);
+  Sound.music(null);
   if (navigator.vibrate) navigator.vibrate([60, 40, 120]);
   const pool = ROASTS[killer] ? [...ROASTS[killer], ...GENERIC_ROASTS.slice(0, 1)] : GENERIC_ROASTS;
   $('roast').textContent = pick(pool);
   const final = Math.floor(score);
   const isBest = final > best;
   if (isBest) { best = final; store.set('samrun.best', best); }
+  celebrate = isBest;
   $('oScore').textContent = final.toLocaleString();
   $('oDist').textContent = `${Math.floor(distance)}m`;
   $('oGains').textContent = gains;
@@ -598,7 +628,6 @@ function hit(o) {
     if (power.boost <= 0) { shield = false; toast('SHIELD POPPED', 'Protein saved you'); invulnT = 0.8; }
     return;
   }
- 
   shake = 0.5;
   flashRed();
   killer = o.type;
@@ -612,6 +641,7 @@ function hit(o) {
   if (busSide) lane = prevLane === lane ? 1 : prevLane;
   else { o.dead = true; o.fly = { vy: rand(5, 7), vx: (o.x >= px ? 1 : -1) * rand(3, 5), spin: rand(-6, 6) }; }
   if (navigator.vibrate) navigator.vibrate(80);
+  Sound.play('hit');
   injuredT = INJURY_TIME;
   invulnT = 1.2;
   toast(pick(HIT_QUIPS), 'One more hit and you’re done');
@@ -621,7 +651,7 @@ function smash(o) {
   o.dead = true;
   o.fly = { vy: rand(7, 10), vx: (o.x >= px ? 1 : -1) * rand(4, 8), spin: rand(-8, 8) };
   score += 50 * (power.beer > 0 ? 2 : 1);
- 
+  Sound.play('hit', { vol: 0.6, rate: 1.3 });
   shake = 0.2;
 }
 
@@ -629,15 +659,15 @@ function collect(p) {
   p.taken = true;
   const mult = power.beer > 0 ? 2 : 1;
   switch (p.type) {
-    case 'gains': gains++; score += 10 * mult; break;
-    case 'beer': power.beer = POWER_TIME.beer; toast(`${icon('cup')} DRUNK MODE`, '2x points · controls reversed'); $('drunkfx').classList.add('on'); break;
-    case 'boost': power.boost = POWER_TIME.boost; toast(`${icon('boost')} SUPERSONIC`, 'Smash through everything'); break;
+    case 'gains': gains++; score += 10 * mult; Sound.play('gains', { rate: rand(0.95, 1.08) }); break;
+    case 'beer': power.beer = POWER_TIME.beer; Sound.play('drink'); toast(`${icon('cup')} DRUNK MODE`, '2x points'); $('drunkfx').classList.add('on'); break;
+    case 'boost': power.boost = POWER_TIME.boost; Sound.boost(true); toast(`${icon('boost')} SUPERSONIC`, 'Smash through everything'); break;
     case 'shake':
-     
+      Sound.play('gulp');
       if (injuredT > 0) { injuredT = 0; toast(`${icon('shake')} PROTEIN SHAKE`, 'Fully healed. Gains restored'); }
       else { shield = true; toast(`${icon('shake')} PROTEIN SHAKE`, 'Shield up'); }
       break;
-    case 'phone': digits++; score += 250 * mult; toast(`${icon('phone')} ${pick(PHONE_QUIPS)}`, `+${250 * mult}`); break;
+    case 'phone': digits++; score += 250 * mult; Sound.play('phone'); toast(`${icon('phone')} ${pick(PHONE_QUIPS)}`, `+${250 * mult}`); break;
   }
 }
 
@@ -732,7 +762,7 @@ function update(dt) {
   // --- timers ---
   invulnT = Math.max(0, invulnT - dt);
   if (injuredT > 0) { injuredT -= dt; if (injuredT <= 0 && state === 'run') toast('Walked it off'); }
-  if (power.boost > 0) power.boost = Math.max(0, power.boost - dt);
+  if (power.boost > 0) { power.boost = Math.max(0, power.boost - dt); if (power.boost === 0) Sound.boost(false); }
   if (power.beer > 0) { power.beer = Math.max(0, power.beer - dt); if (power.beer === 0) $('drunkfx').classList.remove('on'); }
   samInner.visible = invulnT > 0 && invulnT < 10 && power.boost <= 0 && !shield ? Math.floor(invulnT * 12) % 2 === 0 : true;
 
@@ -808,7 +838,12 @@ function update(dt) {
     player.rotation.x = damp(player.rotation.x, -1.5, 8, dt);
     player.position.y = damp(player.position.y, 0.15, 8, dt);
     if (mixer) mixer.timeScale = Math.max(0, 1 - dyingT * 3);
-    if (dyingT > 1.3) { state = 'over'; showScreen('over'); }
+    if (dyingT > 1.3) {
+      state = 'over';
+      showScreen('over');
+      Sound.music('theme', { restart: true });
+      if (celebrate) Sound.play('horn');
+    }
   }
 
   // --- camera ---
@@ -824,8 +859,8 @@ function update(dt) {
     camera.position.y += (Math.random() - 0.5) * shake * 0.8;
   }
   camera.lookAt(camLook);
-  if (drunk) camera.rotation.z += Math.sin(elapsed * 1.7) * 0.07;
-  const fovWant = baseFov + (power.boost > 0 ? 10 : 0) + drunk * Math.sin(elapsed * 2.3) * 3 + (speed - START_SPEED) * 0.25;
+  if (drunk) camera.rotation.z += Math.sin(elapsed * 1.7) * 0.045;
+  const fovWant = baseFov + (power.boost > 0 ? 10 : 0) + drunk * Math.sin(elapsed * 2.3) * 2 + (speed - START_SPEED) * 0.25;
   if (Math.abs(camera.fov - fovWant) > 0.05) {
     camera.fov = damp(camera.fov, fovWant, 4, dt);
     camera.updateProjectionMatrix();

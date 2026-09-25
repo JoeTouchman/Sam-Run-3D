@@ -68,6 +68,8 @@
         <path d="M3 18L2 7l5.5 4.5L12 4l4.5 7.5L22 7l-1 11z" fill="#ffc933"/>
         <rect x="3" y="18" width="18" height="3" rx="1" fill="#e0a400"/></g>
         <circle cx="12" cy="14" r="1.4" fill="#ff5c8a"/></symbol>
+      <symbol id="i-sound" viewBox="0 0 24 24"><path d="M3 9h4l5-4.5v15L7 15H3z" fill="currentColor"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="i-mute" viewBox="0 0 24 24"><path d="M3 9h4l5-4.5v15L7 15H3z" fill="currentColor"/><path d="M16 9l6 6M22 9l-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
       <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1.2" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1.2" fill="currentColor"/></symbol>
     </defs>
   </svg>
@@ -113,6 +115,7 @@
         <svg class="crown"><use href="#i-crown"/></svg>
         <div class="credit-line">Made by the coolest roommate Joe</div>
       </div>
+      <div class="sound"><button class="icon-btn snd-btn" aria-label="Mute"><svg class="ico"><use href="#i-sound"/></svg></button><input class="snd-vol" type="range" min="0" max="100" step="1" aria-label="Volume" /></div>
     </div>
   </div>
 
@@ -121,6 +124,7 @@
     <div class="panel">
       <div class="title small">PAUSED</div>
       <div class="sub">Sam is checking his Hinge.</div>
+      <div class="sound"><button class="icon-btn snd-btn" aria-label="Mute"><svg class="ico"><use href="#i-sound"/></svg></button><input class="snd-vol" type="range" min="0" max="100" step="1" aria-label="Volume" /></div>
       <button id="resumeBtn" class="btn primary">RESUME</button>
       <button id="quitBtn" class="btn">MAIN MENU</button>
     </div>
