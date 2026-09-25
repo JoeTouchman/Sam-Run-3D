@@ -1,6 +1,6 @@
 # Sam Run 3D
 
-The endless runner nobody asked for. Sam sprints through UCSC dodging banana slugs, wild turkeys, fallen redwoods, 8AM midterms and the Campus Loop bus.
+The endless runner for Sam
 
 Plain static site: three.js from a CDN, no build step. Hosted on Vercel at sam.joeprojects.com.
 
