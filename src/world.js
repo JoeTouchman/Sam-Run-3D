@@ -289,7 +289,7 @@ function buildLog(width) {
   return merged(parts);
 }
 
-const BANNER_TEXT = ['GO SLUGS!', 'FEAR THE SLUG', 'WELCOME TO UCSC', 'WELCOME WEEK', 'MOVE-IN DAY', 'FARMERS MARKET', 'CAUTION: DEER', 'BIKES YIELD', 'STAY ON TRAIL', 'MCHENRY LIBRARY', 'QUARRY PLAZA', 'HOMECOMING', 'SLUG PRIDE'];
+const BANNER_TEXT = ['GO SLUGS!', 'FEAR THE SLUG', 'WELCOME TO UCSC', 'WELCOME WEEK', 'MOVE-IN DAY', 'FARMERS MARKET', 'CAUTION: DEER', 'BIKES YIELD', 'STAY ON TRAIL', 'MCHENRY LIBRARY', 'QUARRY PLAZA', 'SLUG PRIDE'];
 function buildBanner(width) {
   const g = new THREE.Group();
   const parts = [];
