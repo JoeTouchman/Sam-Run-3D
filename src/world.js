@@ -289,7 +289,7 @@ function buildLog(width) {
   return merged(parts);
 }
 
-const BANNER_TEXT = ['8AM MIDTERM', 'FINALS WEEK', 'GROUP PROJECT', 'DINING HALL CLOSED', 'RA ON DUTY', 'NO PARTIES', 'QUIET HOURS', 'CHEM 1A LAB', 'SECTION ATTENDANCE'];
+const BANNER_TEXT = ['8AM MIDTERM', 'FINALS WEEK', 'ROBOTICS LAB', 'MECHATRONICS', 'CSE 13S', 'MATH 19A', 'PHYS 5A', 'SEGFAULT', 'PID TUNING', 'SOLDERING LAB', 'ROBOT WONT BOOT', 'CAPSTONE DEMO', 'MATLAB HW', 'NO PARTIES'];
 function buildBanner(width) {
   const g = new THREE.Group();
   const parts = [];
