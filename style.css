@@ -231,9 +231,10 @@ html, body {
 .submit-msg { font-weight: 900; font-size: 15px; min-height: 1.2em; color: var(--gold); }
 .submit-msg.err { color: #ff9a9a; }
 
+.board-panel .title { font-size: clamp(28px, 9vw, 42px); }
 .board-panel { height: calc(100dvh - 32px - var(--safe-top) - var(--safe-bottom)); max-height: 640px; overflow: hidden; }
 .board-list {
-  list-style: none; margin: 0; padding: 0 4px 0 0; width: 100%;
+  list-style: none; margin: 0; padding: 3px 6px 3px 3px; width: 100%;
   flex: 1; min-height: 0; overflow-y: auto; touch-action: pan-y; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
   display: flex; flex-direction: column; gap: 6px;
 }

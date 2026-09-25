@@ -39,6 +39,18 @@ let unlocked = false;
 let hidden = document.hidden;
 let wantTrack = null; // what should be playing when audible
 let boostSrc = null;
+// Another Sam Run tab/window took over the music; stay quiet until this one is touched again.
+let yielded = false;
+const channel = 'BroadcastChannel' in window ? new BroadcastChannel('samrun-audio') : null;
+const tabId = Math.random().toString(36).slice(2);
+if (channel) {
+  channel.onmessage = (e) => {
+    if (e.data?.type === 'music' && e.data.tab !== tabId && !yielded) {
+      yielded = true;
+      syncMusic();
+    }
+  };
+}
 
 let volume = store.get('samrun.sound.volume', 0.8);
 let muted = store.get('samrun.sound.muted', false);
@@ -67,6 +79,11 @@ if (ctx) {
     const g = ctx.createGain();
     g.gain.value = def.vol;
     ctx.createMediaElementSource(el).connect(g).connect(musicGain);
+    // Safety net: if a track starts when it shouldn't (e.g. a play() that resolved
+    // after we already asked it to stop), shut it off straight away.
+    el.addEventListener('playing', () => {
+      if (!(audible() && name === wantTrack)) el.pause();
+    });
     tracks[name] = el;
   }
 }
@@ -76,13 +93,16 @@ function applyVolume() {
   master.gain.setTargetAtTime(muted ? 0 : volume, ctx.currentTime, 0.02);
 }
 
-function audible() { return ctx && unlocked && !hidden; }
+function audible() { return ctx && unlocked && !hidden && !yielded; }
 
 function syncMusic() {
   if (!ctx) return;
   for (const [name, el] of Object.entries(tracks)) {
     const shouldPlay = audible() && name === wantTrack;
-    if (shouldPlay && el.paused) el.play().catch(() => {});
+    if (shouldPlay && el.paused) {
+      el.play().catch(() => {});
+      channel?.postMessage({ type: 'music', tab: tabId });
+    }
     if (!shouldPlay && !el.paused) el.pause();
   }
 }
@@ -118,8 +138,9 @@ export const Sound = {
   unlock() {
     if (!ctx) return;
     if (ctx.state !== 'running' && !document.hidden) ctx.resume().catch(() => {});
-    if (!unlocked) {
+    if (!unlocked || yielded) {
       unlocked = true;
+      yielded = false; // the tab you're playing in gets the music back
       syncMusic();
     }
   },
