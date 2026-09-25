@@ -36,8 +36,8 @@ const ROASTS = {
   turkey: ['Bested by a wild turkey. Nature is healing.', 'The turkey had more aura.'],
   log: ['Redwood 1, Sam 0.', 'Tripped on a log. Skipped leg day again?'],
   logWide: ['Redwood 1, Sam 0.', 'Tripped on a log. Skipped leg day again?'],
-  banner: ['The 8AM got you. As it always does.', 'Clotheslined by academics.'],
-  bannerWide: ['The 8AM got you. As it always does.', 'Clotheslined by academics.'],
+  banner: ['Clotheslined by a campus banner.', 'Forgot to duck. Go Slugs, I guess.'],
+  bannerWide: ['Clotheslined by a campus banner.', 'Forgot to duck. Go Slugs, I guess.'],
   bus: ['Hit by the Loop bus. At least it was on time for once.', 'Should’ve taken the bus instead of getting hit by it.'],
 };
 const GENERIC_ROASTS = ['She’s not texting back, bro.', 'Worse than your Rocket League ranked games.', 'Should’ve skipped the 4th White Claw.', 'The blondes at Cowell saw that.'];
