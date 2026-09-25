@@ -208,3 +208,48 @@ html, body {
 .snd-vol::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; margin-top: -7px; border-radius: 50%; background: var(--cream); border: 3px solid var(--ink); }
 .snd-vol::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--cream); border: 3px solid var(--ink); }
 .sound.off .snd-vol { opacity: .45; }
+
+/* ---------- leaderboard ---------- */
+.panel { max-height: calc(100dvh - 32px - var(--safe-top) - var(--safe-bottom)); overflow-y: auto; touch-action: pan-y; }
+#over .panel { gap: 10px; }
+.board-btn { font-size: 18px; padding: 10px 20px 7px; display: flex; align-items: center; gap: 8px; }
+.board-btn .ico { width: 22px; height: 22px; }
+
+.name-row { display: flex; gap: 8px; width: 100%; }
+#nameInput {
+  flex: 1; min-width: 0;
+  font-family: 'Luckiest Guy', sans-serif; font-size: 20px; letter-spacing: 2px; text-transform: uppercase;
+  padding: 10px 12px 7px; border-radius: 14px; border: 3px solid var(--ink);
+  background: var(--cream); color: var(--ink); outline: none;
+  user-select: text; -webkit-user-select: text; touch-action: manipulation;
+}
+#nameInput::placeholder { color: rgba(27,16,48,.35); }
+#nameInput:focus { border-color: var(--orange); }
+#nameInput:disabled { opacity: .6; }
+.panel .btn.post { width: auto; flex: none; min-width: 0; padding: 10px 16px 7px; font-size: 20px; background: linear-gradient(180deg, var(--gold), var(--orange)); }
+.btn:disabled { opacity: .6; transform: none; box-shadow: 0 5px 0 var(--ink); }
+.submit-msg { font-weight: 900; font-size: 15px; min-height: 1.2em; color: var(--gold); }
+.submit-msg.err { color: #ff9a9a; }
+
+.board-panel { height: calc(100dvh - 32px - var(--safe-top) - var(--safe-bottom)); max-height: 640px; overflow: hidden; }
+.board-list {
+  list-style: none; margin: 0; padding: 0 4px 0 0; width: 100%;
+  flex: 1; min-height: 0; overflow-y: auto; touch-action: pan-y; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.board-list li {
+  display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 10px;
+  background: rgba(255,255,255,.07); border-radius: 12px; padding: 8px 12px 6px 8px; text-align: left;
+}
+.board-list li.me { background: rgba(255,122,26,.35); outline: 2px solid var(--orange); }
+.board-list .rk {
+  font-family: 'Luckiest Guy', sans-serif; font-size: 16px; width: 30px; height: 30px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,.12); padding-top: 3px;
+}
+.board-list li:nth-child(1) .rk { background: #ffc933; color: var(--ink); }
+.board-list li:nth-child(2) .rk { background: #d9dde6; color: var(--ink); }
+.board-list li:nth-child(3) .rk { background: #d98a4a; color: var(--ink); }
+.board-list .nm { font-family: 'Luckiest Guy', sans-serif; font-size: 19px; letter-spacing: 1.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-top: 3px; }
+.board-list .sc { font-family: 'Luckiest Guy', sans-serif; font-size: 19px; text-align: right; padding-top: 3px; }
+.board-list .sc small { display: block; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 11px; opacity: .7; margin-top: -2px; }
+.board-list .note { display: block; text-align: center; background: none; font-weight: 800; opacity: .8; padding: 24px 8px; }

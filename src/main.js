@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { Sound } from './audio.js';
+import { fetchTop, submitScore, cleanName, NAME_PATTERN } from './leaderboard.js';
 import {
   LANE_W, LANES, PATH_W, GROUND_LEN, CHUNK,
   makePathTexture, makeGrassTexture, makeSky, buildChunk, buildArch, OBSTACLES, PICKUPS,
@@ -290,6 +291,7 @@ let distance = 0;
 let score = 0;
 let gains = 0;
 let digits = 0;
+let smashes = 0;
 let runTime = 0;
 let injuredT = 0;
 let invulnT = 0;
@@ -421,7 +423,7 @@ function resetRun() {
   for (let i = obstacles.length - 1; i >= 0; i--) recycle(obstacles, i);
   for (let i = pickups.length - 1; i >= 0; i--) recycle(pickups, i, 'p_');
   lane = 1; px = 0; py = 0; vy = 0; grounded = true; slideT = 0; queuedSlide = false;
-  speed = 0; distance = 0; score = 0; gains = 0; digits = 0; runTime = 0;
+  speed = 0; distance = 0; score = 0; gains = 0; digits = 0; smashes = 0; runTime = 0;
   injuredT = 0; invulnT = 0; shield = false; power.beer = 0; power.boost = 0;
   shake = 0; milestoneI = 0; sinceRow = 0; rowGap = 24; rowsSinceBus = 99; killer = null; sinceArch = 0;
   player.position.set(0, 0, 0);
@@ -470,7 +472,7 @@ function updatePowersHud() {
 }
 
 function showScreen(id) {
-  for (const s of ['loading', 'menu', 'pause', 'over']) $(s).classList.toggle('hidden', s !== id);
+  for (const s of ['loading', 'menu', 'pause', 'over', 'board']) $(s).classList.toggle('hidden', s !== id);
   $('hud').classList.toggle('hidden', !(id === null || id === 'pause'));
 }
 
@@ -498,6 +500,7 @@ function act(a) {
 }
 
 window.addEventListener('keydown', (e) => {
+  if (e.target instanceof HTMLInputElement || !$('board').classList.contains('hidden')) return;
   const k = e.key;
   if (['ArrowLeft', 'a', 'A'].includes(k)) act('left');
   else if (['ArrowRight', 'd', 'D'].includes(k)) act('right');
@@ -580,6 +583,86 @@ function togglePause() {
   else if (state === 'paused') { state = prevState || 'run'; showScreen(null); clock.getDelta(); Sound.music('run'); if (power.boost > 0) Sound.boost(true); }
 }
 
+// ---------- leaderboard ----------
+let posted = false;
+let boardReturn = 'menu';
+let myName = store.get('samrun.name', '');
+
+function setSubmitMsg(text, err = false) {
+  const el = $('submitMsg');
+  el.textContent = text;
+  el.classList.toggle('err', err);
+}
+
+function prepareNameForm() {
+  posted = false;
+  $('nameInput').value = myName;
+  $('nameInput').disabled = false;
+  $('postBtn').disabled = false;
+  $('postBtn').textContent = 'POST';
+  setSubmitMsg(Math.floor(score) > 0 ? 'Put your name on the board' : '');
+}
+
+$('nameInput').addEventListener('input', (e) => {
+  const v = cleanName(e.target.value);
+  if (v !== e.target.value) e.target.value = v;
+});
+
+$('nameForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (posted) return;
+  const name = cleanName($('nameInput').value).trim();
+  if (!name || !NAME_PATTERN.test(name)) { setSubmitMsg('Type a name first', true); return; }
+  $('nameInput').blur();
+  $('postBtn').disabled = true;
+  $('nameInput').disabled = true;
+  setSubmitMsg('Posting…');
+  try {
+    const r = await submitScore({ name, score, distance, gains, digits, smashes, duration: runTime });
+    posted = true;
+    myName = name;
+    store.set('samrun.name', name);
+    $('postBtn').textContent = 'POSTED';
+    setSubmitMsg(r.improved ? `You're #${r.rank} on the board!` : `Your best is still ${r.best.toLocaleString()} (#${r.rank})`);
+  } catch (err) {
+    const m = String(err.message || '');
+    setSubmitMsg(m.includes('slow down') ? 'Slow down, try again in a sec' : m.includes('invalid run') ? 'That run looks sus. Not posted.' : 'Couldn’t post. Check your connection.', true);
+    $('postBtn').disabled = false;
+    $('nameInput').disabled = false;
+  }
+});
+
+async function openBoard(from) {
+  boardReturn = from;
+  showScreen('board');
+  const list = $('boardList');
+  list.innerHTML = '<li class="note">Loading…</li>';
+  try {
+    const rows = await fetchTop(100);
+    list.innerHTML = '';
+    if (!rows.length) { list.innerHTML = '<li class="note">No scores yet. Be the first.</li>'; return; }
+    let meEl = null;
+    rows.forEach((r, i) => {
+      const li = document.createElement('li');
+      const rk = document.createElement('span'); rk.className = 'rk'; rk.textContent = i + 1;
+      const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = r.name;
+      const sc = document.createElement('span'); sc.className = 'sc'; sc.textContent = r.score.toLocaleString();
+      const sm = document.createElement('small'); sm.textContent = `${r.distance.toLocaleString()}m`;
+      sc.append(sm);
+      li.append(rk, nm, sc);
+      if (myName && r.name === myName) { li.classList.add('me'); meEl = li; }
+      list.append(li);
+    });
+    if (meEl) meEl.scrollIntoView({ block: 'center' });
+  } catch {
+    list.innerHTML = '<li class="note">Couldn’t load the leaderboard. Check your connection.</li>';
+  }
+}
+
+$('menuBoardBtn').addEventListener('click', () => openBoard('menu'));
+$('overBoardBtn').addEventListener('click', () => openBoard('over'));
+$('boardBack').addEventListener('click', () => showScreen(boardReturn));
+
 // ---------- flow ----------
 const MENU_CAM = new THREE.Vector3(0.7, 1.25, 4.0);
 const MENU_LOOK = new THREE.Vector3(0, 0.55, 0);
@@ -628,6 +711,7 @@ function gameOver() {
   $('oDigits').textContent = digits;
   $('newBest').classList.toggle('hidden', !isBest);
   $('oBest').textContent = isBest ? '' : `Personal record: ${best.toLocaleString()}`;
+  prepareNameForm();
   $('drunkfx').classList.remove('on');
 }
 
@@ -659,6 +743,7 @@ function hit(o) {
 
 function smash(o) {
   o.dead = true;
+  smashes++;
   o.fly = { vy: rand(7, 10), vx: (o.x >= px ? 1 : -1) * rand(4, 8), spin: rand(-8, 8) };
   score += 50 * (power.beer > 0 ? 2 : 1);
   Sound.play('hit', { vol: 0.6, rate: 1.3 });
@@ -919,5 +1004,5 @@ load().then(async () => {
   $('loadText').textContent = 'Sam tripped while loading. Refresh to try again.';
 });
 
-// debug handle for testing in the browser console
-window.__samrun = { player, samInner, camera, scene, act, get state() { return state; }, get speed() { return speed; }, obstacles, pickups, setGod(v) { invulnT = v ? 1e9 : 0; }, give(type) { collect({ type }); }, step(n = 1) { for (let i = 0; i < n; i++) update(1 / 60); renderer.render(scene, camera); } };
+// debug handle for testing in the browser console (local dev only)
+if (['localhost', '127.0.0.1'].includes(location.hostname)) window.__samrun = { player, samInner, camera, scene, act, get state() { return state; }, get speed() { return speed; }, obstacles, pickups, setGod(v) { invulnT = v ? 1e9 : 0; }, give(type) { collect({ type }); }, step(n = 1) { for (let i = 0; i < n; i++) update(1 / 60); renderer.render(scene, camera); } };

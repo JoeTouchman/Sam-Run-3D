@@ -114,6 +114,7 @@
     <div class="bottom">
       <div id="bestLine" class="best"></div>
       <button id="playBtn" class="btn primary">TAP TO RUN</button>
+      <button id="menuBoardBtn" class="btn board-btn"><svg class="ico"><use href="#i-trophy"/></svg> LEADERBOARD</button>
       <div class="credit">
         <svg class="crown"><use href="#i-crown"/></svg>
         <div class="credit-line">Made by the coolest roommate Joe</div>
@@ -146,14 +147,30 @@
       </div>
       <div id="newBest" class="newbest hidden"><svg class="ico"><use href="#i-trophy"/></svg> NEW PERSONAL RECORD</div>
       <div id="oBest" class="best"></div>
+      <form id="nameForm" class="name-row" autocomplete="off">
+        <input id="nameInput" maxlength="12" placeholder="YOUR NAME" autocapitalize="characters" autocorrect="off" spellcheck="false" enterkeyhint="send" aria-label="Your name for the leaderboard" />
+        <button id="postBtn" class="btn post" type="submit">POST</button>
+      </form>
+      <div id="submitMsg" class="submit-msg"></div>
       <button id="againBtn" class="btn primary">RUN IT BACK</button>
       <div class="row">
         <button id="shareBtn" class="btn">SHARE</button>
+        <button id="overBoardBtn" class="btn">BOARD</button>
         <button id="menuBtn" class="btn">MENU</button>
       </div>
     </div>
   </div>
 
+
+  <!-- Leaderboard -->
+  <div id="board" class="screen dim hidden">
+    <div class="panel board-panel">
+      <div class="title small">LEADERBOARD</div>
+      <div class="sub">All-time top runners</div>
+      <ol id="boardList" class="board-list"></ol>
+      <button id="boardBack" class="btn primary">BACK</button>
+    </div>
+  </div>
 
   <script type="module" src="/src/main.js"></script>
 </body>
