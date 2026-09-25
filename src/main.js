@@ -301,6 +301,10 @@ let dyingT = 0;
 let milestoneI = 0;
 let rowGap = 24;
 let sinceRow = 0;
+// Buses are the only obstacles you can't jump or slide past, so the spawner keeps
+// bus rows apart: never two bus rows in a row, and an oncoming (faster) bus only
+// when the rows ahead of it are bus-free, so it can't catch up and close the last lane.
+let rowsSinceBus = 99;
 let sinceArch = 0;
 let best = store.get('samrun.best', 0);
 let killer = null;
@@ -365,8 +369,10 @@ function spawnRow(z) {
   const lanes = [0, 1, 2].sort(() => Math.random() - 0.5);
   const small = ['slug', 'turkey', 'log', 'banner'];
   const d = distance;
-  const r = Math.random();
+  let r = Math.random();
+  if (rowsSinceBus < 1 && r < 0.28) r = 0.28 + Math.random() * 0.72; // no back-to-back bus rows
   let free = [];
+  let bus = false;
 
   if (d < 140) {
     const t = pick(['slug', 'turkey', 'log', 'banner']);
@@ -374,11 +380,13 @@ function spawnRow(z) {
     free = [lanes[1], lanes[2]];
   } else if (r < 0.16) {
     // one bus + one small
-    const oncoming = d > 500 && Math.random() < 0.35;
+    const oncoming = d > 500 && rowsSinceBus >= 5 && Math.random() < 0.35;
+    bus = true;
     spawnObstacle('bus', LANES[lanes[0]], z - 5, oncoming ? 7 : 0);
     spawnObstacle(pick(small), LANES[lanes[1]], z);
     free = [lanes[2]];
   } else if (r < 0.28) {
+    bus = true;
     spawnObstacle('bus', LANES[lanes[0]], z - 5);
     spawnObstacle('bus', LANES[lanes[1]], z - 5 - rand(0, 4));
     free = [lanes[2]];
@@ -400,6 +408,8 @@ function spawnRow(z) {
     if (Math.random() < 0.5) { spawnObstacle(pick(small), LANES[lanes[1]], z - 3); free = [lanes[2]]; } else free = [lanes[1], lanes[2]];
   }
 
+  rowsSinceBus = bus ? 0 : rowsSinceBus + 1;
+
   if (free.length) {
     const fl = pick(free);
     if (d > 60 && Math.random() < 0.09) spawnPower(fl, z - 6);
@@ -413,7 +423,7 @@ function resetRun() {
   lane = 1; px = 0; py = 0; vy = 0; grounded = true; slideT = 0; queuedSlide = false;
   speed = 0; distance = 0; score = 0; gains = 0; digits = 0; runTime = 0;
   injuredT = 0; invulnT = 0; shield = false; power.beer = 0; power.boost = 0;
-  shake = 0; milestoneI = 0; sinceRow = 0; rowGap = 24; killer = null; sinceArch = 0;
+  shake = 0; milestoneI = 0; sinceRow = 0; rowGap = 24; rowsSinceBus = 99; killer = null; sinceArch = 0;
   player.position.set(0, 0, 0);
   player.rotation.set(0, 0, 0);
   samInner.visible = true;
