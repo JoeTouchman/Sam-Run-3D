@@ -438,10 +438,10 @@ export const OBSTACLES = {
 };
 
 // ---------- pickups ----------
-// Dumbbells: polished chrome, shiny like a coin (main.js gives these materials a reflection
-// map), and nothing like the yellow banana slugs.
-const plateMat = new THREE.MeshStandardMaterial({ color: 0xb9c3cf, emissive: 0x10151c, metalness: 1, roughness: 0.2 });
-const barMat = new THREE.MeshStandardMaterial({ color: 0xeef2f6, emissive: 0x1a2028, metalness: 1, roughness: 0.1 });
+// Dumbbells: dark gunmetal silver, almost black, with a soft metallic sheen (main.js gives
+// these materials a reflection map). Nothing like the yellow banana slugs.
+const plateMat = new THREE.MeshStandardMaterial({ color: 0x3b3d40, emissive: 0x0b0b0c, metalness: 1, roughness: 0.32 });
+const barMat = new THREE.MeshStandardMaterial({ color: 0x6d7074, emissive: 0x111112, metalness: 1, roughness: 0.25 });
 export const DUMBBELL_MATS = [plateMat, barMat];
 
 let barGeo, plateGeo;
