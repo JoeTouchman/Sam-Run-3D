@@ -1677,6 +1677,8 @@ function update(dt) {
       p.x += (px - p.x) * k;
       p.y += (py + 0.9 - p.y) * k;
       p.z += (0 - p.z) * k * 0.9;
+      // shrink as they close in so they melt into Sam instead of flying past the camera
+      m.scale.setScalar(clamp(Math.hypot(p.x - px, p.z) / 7, 0.35, 1));
     }
     m.position.x = p.x;
     m.position.z = p.z;
@@ -1688,6 +1690,7 @@ function update(dt) {
       m.rotation.y = p.t * 3;
       m.position.y = p.y + Math.sin(p.t * 3) * 0.08;
       if (state === 'run' && Math.abs(p.z) < 1.0 && Math.abs(p.x - px) < 1.0 && Math.abs((py + 0.9) - p.y) < 1.4) collect(p);
+      else if (p.rizzed && state === 'run' && Math.hypot(p.x - px, p.z) < 2.6) collect(p); // pulled ones get grabbed early
     }
     if (p.z > DESPAWN_Z) recycle(pickups, i, 'p_');
   }
