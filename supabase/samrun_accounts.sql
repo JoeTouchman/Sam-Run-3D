@@ -300,9 +300,9 @@ begin
   end loop;
 end $$;
 
--- After the accounts-enabled site is live, posting without an account is switched off
--- (migration "samrun_accounts_only"):
---   revoke execute on function public.samrun_submit_score(text, integer, integer, integer, integer, integer, real) from anon, authenticated;
+-- Posting without an account is switched off (migration "samrun_accounts_only", applied
+-- once the accounts site was live). samrun_submit_score is kept only for reference.
+revoke execute on function public.samrun_submit_score(text, integer, integer, integer, integer, integer, real) from public, anon, authenticated;
 
 -- Lockdown (migration "samrun_accounts_lockdown"): no table access for API roles at all.
 revoke all on table public.samrun_accounts, public.samrun_sessions from anon, authenticated;
