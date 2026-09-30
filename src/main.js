@@ -234,7 +234,7 @@ function updateHearts(dt, dz) {
     h.sprite.position.y += h.vy * dt;
     h.sprite.position.z += dz * 0.08; // mostly ride along with Sam instead of flying at the camera
     h.sprite.scale.setScalar(h.size * Math.min(1, f * 5) * (1 + Math.sin(h.t * 14) * 0.08));
-    h.sprite.material.opacity = 1 - f * f;
+    h.sprite.material.opacity = 0.75 * (1 - f * f);
   }
 }
 
@@ -453,6 +453,8 @@ function spawnObstacle(type, x, z, vz = 0) {
   mesh.visible = true;
   mesh.position.set(x, 0, z);
   mesh.rotation.set(0, 0, 0);
+  mesh.userData.baseScale ??= mesh.scale.x; // pooled meshes may have shrunk while flying off
+  mesh.scale.setScalar(mesh.userData.baseScale);
   const e = { type, mesh, x, z, vz, w: def.w, len: def.len, bottom: def.bottom, top: def.top, ramp: !!def.ramp, dead: false, fly: null, passed: false, used: false };
   obstacles.push(e);
   return e;
@@ -1382,6 +1384,14 @@ function hit(o) {
   toast(pick(HIT_QUIPS), 'One more hit and you’re done');
 }
 
+// Knock something off the road without it ever looking like it'll hit Sam: it flies up,
+// backward (against the road's scroll) and out to the far side from him, shrinking as it goes.
+function launchAway(q) {
+  q.dead = true;
+  const side = Math.abs(q.x - px) > 0.5 ? Math.sign(q.x - px) : (q.x >= 0 ? 1 : -1);
+  q.fly = { vy: rand(9, 12), vx: side * rand(9, 13), vz: -(speed + rand(10, 16)), spin: rand(-8, 8) };
+}
+
 // Supersonic ending: blast away everything around Sam so he doesn't drop out of it straight
 // into a bus (like the jetpack landing in Subway Surfers). The bus or ramp he's standing on stays.
 function clearTheWay() {
@@ -1390,8 +1400,7 @@ function clearTheWay() {
     if (o.dead || o.fly) continue;
     if (o.z - o.len / 2 > 1.5 || o.z + o.len / 2 < -60) continue;
     if (onRoof && (o.ramp || o.type === 'bus') && Math.abs(o.x - px) < o.w / 2 + 0.1) continue;
-    o.dead = true;
-    o.fly = { vy: rand(8, 12), vx: (o.x >= px ? 1 : -1) * rand(5, 9), spin: rand(-8, 8) };
+    launchAway(o);
   }
   invulnT = Math.max(invulnT, 0.8);
   shake = 0.25;
@@ -1415,7 +1424,7 @@ function collect(p) {
     case 'gains':
       gains++; run.gains++; score += 10 * mult;
       if (power.beer > 0) run.drunkGains++;
-      if (p.rizzed) { run.rizzGains++; emitHeart(px + rand(-0.3, 0.3), py + 1.6, 0.2, 0.22); }
+      if (p.rizzed) { run.rizzGains++; if (Math.random() < 0.3) emitHeart(px + rand(-0.3, 0.3), py + 1.6, 0.2, 0.15); }
       Sound.play('gains', { rate: p.rizzed ? rand(1.15, 1.3) : rand(0.95, 1.08) });
       break;
     case 'beer': power.beer = POWER_TIME.beer; Sound.play('drink'); toast(`${icon('cup')} DRUNK MODE`, '2x points'); $('drunkfx').classList.add('on'); break;
@@ -1434,7 +1443,7 @@ function collect(p) {
       power.shades = POWER_TIME.shades; run.shades++;
       Sound.play('phone', { rate: 1.25, vol: 0.7 });
       toast(`${icon('shades')} SEXY MODE`, pick(SEXY_QUIPS));
-      for (let k = 0; k < 6; k++) emitHeart(px + rand(-0.6, 0.6), py + rand(1, 2), rand(-0.3, 0.3), 0.3);
+      for (let k = 0; k < 3; k++) emitHeart(px + rand(-0.6, 0.6), py + rand(1, 2), rand(-0.3, 0.3), 0.22);
       break;
     case 'phone': run.digits++; digits++; score += 250 * mult; Sound.play('phone'); toast(`${icon('phone')} ${pick(PHONE_QUIPS)}`, `+${250 * mult}`); break;
   }
@@ -1597,12 +1606,12 @@ function update(dt) {
   aura.visible = rizz;
   if (rizz) {
     const pulse = Math.sin(elapsed * 5);
-    aura.scale.setScalar(1 + pulse * 0.06);
-    aura.material.opacity = 0.08 + (pulse + 1) * 0.03;
+    aura.scale.setScalar(0.85 + pulse * 0.04);
+    aura.material.opacity = 0.035 + (pulse + 1) * 0.012;
     // warn before it runs out, like the other timers
     if (power.shades < 1.5) aura.visible = Math.floor(elapsed * 8) % 2 === 0;
     glint.material.opacity = Math.max(0, Math.sin(elapsed * 3.2)) ** 6;
-    if (Math.random() < dt * 5) emitHeart(px + rand(-0.5, 0.5), py + rand(1.2, 1.9), rand(-0.2, 0.3), rand(0.18, 0.3));
+    if (Math.random() < dt * 1.8) emitHeart(px + rand(-0.5, 0.5), py + rand(1.3, 1.9), rand(-0.2, 0.3), rand(0.12, 0.2));
   }
   updateHearts(dt, dz);
 
@@ -1614,6 +1623,10 @@ function update(dt) {
     if (o.fly) {
       o.fly.vy -= GRAVITY * 0.6 * dt;
       o.x += o.fly.vx * dt;
+      if (o.fly.vz) {
+        o.z += o.fly.vz * dt;
+        o.mesh.scale.multiplyScalar(1 - dt * 1.2);
+      }
       o.mesh.position.y += o.fly.vy * dt;
       o.mesh.rotation.x += o.fly.spin * dt;
       o.mesh.rotation.z += o.fly.spin * 0.7 * dt;
@@ -1633,10 +1646,7 @@ function update(dt) {
     if (o.vz > 0 && !o.dead && o.type === 'bus') {
       for (const q of obstacles) {
         if (q === o || q.dead || q.fly || q.type === 'bus' || q.ramp) continue;
-        if (Math.abs(q.x - o.x) < 1.2 && Math.abs(q.z - o.z) < (o.len + q.len) / 2) {
-          q.dead = true;
-          q.fly = { vy: rand(7, 10), vx: (q.x >= o.x ? 1 : -1) * rand(4, 7), spin: rand(-8, 8) };
-        }
+        if (Math.abs(q.x - o.x) < 1.2 && Math.abs(q.z - o.z) < (o.len + q.len) / 2) launchAway(q);
       }
     }
     o.mesh.position.x = o.x;
