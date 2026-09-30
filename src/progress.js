@@ -7,11 +7,13 @@ export const SKINS = [
   { id: 'business', name: 'Business Sam', tag: 'Circling back on that run', file: 'assets/skins/business.fbx', price: 5000 },
   { id: 'familiar', name: 'Familiar Sam', tag: 'Haven’t we seen him somewhere?', file: 'assets/skins/familiar.fbx', price: 10000 },
 ];
+for (const s of SKINS) s.thumb = `assets/skins/${s.id}_thumb.webp`;
 export const skinById = (id) => SKINS.find((s) => s.id === id) || SKINS[0];
 
 // ---------- missions ----------
 // perRun: best single-run value counts; otherwise progress adds up across runs.
-// Each template has 5 tiers; later mission sets use higher tiers.
+// Each template has 5 tiers. A set is one easy, one medium and one hard mission (three tiers in a
+// row), and the whole ladder shifts up a tier every few sets.
 const TEMPLATES = [
   { id: 'gains', perRun: true, text: (n) => `Collect ${n} dumbbells in one run`, tiers: [50, 100, 175, 275, 400] },
   { id: 'distance', perRun: true, text: (n) => `Run ${n.toLocaleString()}m in one run`, tiers: [500, 1000, 1600, 2500, 4000] },
@@ -30,20 +32,28 @@ const byId = Object.fromEntries(TEMPLATES.map((t) => [t.id, t]));
 
 export const setReward = (set) => Math.min(2000, 250 + set * 150);
 
+export const DIFFS = ['easy', 'medium', 'hard'];
+
 // Deterministic per set so everyone's set N is the same three missions.
 function missionsForSet(set) {
   let seed = (set + 1) * 2654435761 % 4294967296;
   const rnd = () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; };
   const ids = TEMPLATES.map((t) => t.id);
   for (let i = ids.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [ids[i], ids[j]] = [ids[j], ids[i]]; }
-  const tier = Math.min(4, Math.floor(set / 2));
-  return ids.slice(0, 3).map((id) => ({ id, target: byId[id].tiers[tier], prog: 0 }));
+  const base = Math.min(2, Math.floor(set / 3));
+  return ids.slice(0, 3).map((id, i) => ({ id, diff: DIFFS[i], target: byId[id].tiers[base + i], prog: 0 }));
 }
 
 export function freshMissions() { return { set: 0, list: missionsForSet(0) }; }
 
 export function validMissions(m) {
   return m && Number.isInteger(m.set) && Array.isArray(m.list) && m.list.length === 3 && m.list.every((x) => byId[x.id]);
+}
+
+// Saves from before missions had difficulties get a fresh easy/medium/hard list for the same set.
+export function upgradeMissions(m) {
+  if (m.list.every((x) => DIFFS.includes(x.diff))) return m;
+  return { set: m.set, list: missionsForSet(m.set) };
 }
 
 export const missionText = (m) => byId[m.id].text(m.target);

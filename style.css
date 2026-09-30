@@ -266,6 +266,10 @@ html, body {
 .mission { display: grid; grid-template-columns: 26px 1fr; gap: 10px; align-items: center; text-align: left; background: rgba(255,255,255,.08); border-radius: 12px; padding: 9px 12px 9px 9px; }
 .mission .ico { width: 26px; height: 26px; }
 .mission .mt { font-weight: 900; font-size: 14px; line-height: 1.2; }
+.diff { display: inline-block; font-family: 'Luckiest Guy', sans-serif; font-weight: 400; font-size: 11px; letter-spacing: .5px; text-transform: uppercase; padding: 3px 6px 1px; border-radius: 6px; margin-right: 6px; vertical-align: 1px; color: var(--ink); }
+.diff.easy { background: #7be08f; }
+.diff.medium { background: var(--gold); }
+.diff.hard { background: #ff7a8a; }
 .mission .bar2 { height: 7px; border-radius: 99px; background: rgba(255,255,255,.2); overflow: hidden; margin-top: 6px; }
 .mission .bar2 i { display: block; height: 100%; background: linear-gradient(90deg, var(--gold), var(--orange)); }
 .mission .mp { font-size: 11px; font-weight: 800; opacity: .75; margin-top: 3px; }
@@ -322,10 +326,22 @@ html, body {
 .skin-info { flex: 1; min-width: 0; }
 .skin-name { font-family: 'Luckiest Guy', sans-serif; font-size: 28px; color: var(--gold); letter-spacing: 1px; padding-top: 3px; }
 .skin-tag { font-weight: 800; font-size: 13px; opacity: .85; }
-.skin-dots { display: flex; gap: 6px; }
-.skin-dots i { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,.3); }
-.skin-dots i.on { background: var(--gold); }
-.skin-dots i.own { box-shadow: 0 0 0 2px rgba(73,199,107,.9); }
+.skin-thumbs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; width: 100%; }
+.thumb {
+  position: relative; aspect-ratio: 4 / 5; padding: 0; border-radius: 12px; overflow: hidden; cursor: pointer;
+  border: 3px solid rgba(255,255,255,.25); background: linear-gradient(180deg, #3b4c9b, #f49a7a); touch-action: manipulation;
+}
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
+.thumb.locked img { filter: saturate(.55) brightness(.8); }
+.thumb.sel { border-color: var(--gold); box-shadow: 0 0 0 2px var(--ink), 0 4px 0 var(--ink); transform: translateY(-2px); }
+.badge {
+  position: absolute; left: 50%; bottom: 4px; transform: translateX(-50%);
+  font-family: 'Luckiest Guy', sans-serif; font-weight: 400; font-size: 12px; letter-spacing: .5px; line-height: 1;
+  padding: 4px 7px 2px; border-radius: 99px; background: var(--ink); color: var(--gold); white-space: nowrap;
+}
+.badge.on { background: var(--gold); color: var(--ink); }
+.badge.own { padding: 2px; background: none; }
+.badge.own .ico { width: 20px; height: 20px; }
 #skinAction { font-size: 21px; }
 #skinAction .ico { width: 22px; height: 22px; }
 .spin { position: fixed; left: 50%; top: 45%; width: 48px; height: 48px; margin: -24px; border-radius: 50%; border: 5px solid rgba(255,255,255,.3); border-top-color: var(--gold); animation: spin .8s linear infinite; }

@@ -4,7 +4,7 @@ import { Sound } from './audio.js';
 import { fetchTop, cleanName, NAME_PATTERN } from './leaderboard.js';
 import { Account } from './account.js';
 import {
-  SKINS, skinById, MissionRun, freshMissions, validMissions, missionText, setReward, dailyReady, nextDailyBonus,
+  SKINS, skinById, MissionRun, freshMissions, validMissions, upgradeMissions, missionText, setReward, dailyReady, nextDailyBonus,
 } from './progress.js';
 import {
   LANE_W, LANES, PATH_W, GROUND_LEN, CHUNK, ROOF_Y, RAMP_LEN,
@@ -425,7 +425,7 @@ const pools = {};
 
 function loadLocalMissions() {
   const m = store.get('samrun.missions', null);
-  return validMissions(m) ? m : freshMissions();
+  return validMissions(m) ? upgradeMissions(m) : freshMissions();
 }
 
 function spawnObstacle(type, x, z, vz = 0) {
@@ -778,7 +778,7 @@ function renderMissions(el) {
     const done = m.prog >= m.target;
     const f = Math.min(1, m.prog / m.target);
     return `<div class="mission${done ? ' done' : ''}">${done ? icon('check') : `<span class="num">${i + 1}</span>`}
-      <div><div class="mt">${missionText(m)}</div><div class="bar2"><i style="width:${(f * 100).toFixed(0)}%"></i></div>
+      <div><div class="mt"><span class="diff ${m.diff}">${m.diff}</span>${missionText(m)}</div><div class="bar2"><i style="width:${(f * 100).toFixed(0)}%"></i></div>
       <div class="mp">${done ? 'Done!' : `${m.prog.toLocaleString()} / ${m.target.toLocaleString()}`}</div></div></div>`;
   }).join('');
 }
@@ -817,7 +817,7 @@ function setAccountMode(mode) {
   $('tabSignIn').classList.toggle('on', mode === 'signin');
   $('acctSubmit').textContent = mode === 'create' ? 'CREATE ACCOUNT' : 'SIGN IN';
   $('acctPass').autocomplete = mode === 'create' ? 'new-password' : 'current-password';
-  $('acctHint').textContent = mode === 'create' ? 'Pick a password you’ll remember. There’s no email reset.' : '';
+  $('acctHint').textContent = '';
   $('acctHint').classList.remove('err');
   setAcctMsg('');
   if (mode === 'create') checkName();
@@ -845,7 +845,7 @@ function checkName() {
       if (cleanName($('acctName').value).trim() !== name || accountMode !== 'create') return;
       if (st.taken) { hint.textContent = `${name} is taken. Is it you? Sign in instead.`; hint.classList.add('err'); }
       else if (st.legacy != null) { hint.textContent = `${name} is on the board with ${st.legacy.toLocaleString()}. Creating this account claims that score.`; hint.classList.remove('err'); }
-      else { hint.textContent = 'Name’s free. Pick a password you’ll remember.'; hint.classList.remove('err'); }
+      else { hint.textContent = 'Name’s free!'; hint.classList.remove('err'); }
     } catch { /* offline: the submit will say so */ }
   }, 350);
 }
@@ -912,7 +912,7 @@ $('saveSignInBtn').addEventListener('click', () => openAccount('over', 'signin')
 
 // Signed in on another device? Their missions live on the server.
 function adoptServerMissions(profile) {
-  if (validMissions(profile?.missions)) { missions = profile.missions; saveMissions(); }
+  if (validMissions(profile?.missions)) { missions = upgradeMissions(profile.missions); saveMissions(); }
   else Account.saveMissions(missions);
 }
 
@@ -1006,7 +1006,11 @@ function renderShop() {
   const equipped = equippedSkin === skin.id;
   $('skinName').textContent = skin.name;
   $('skinTag').textContent = skin.tag;
-  $('skinDots').innerHTML = SKINS.map((k, i) => `<i class="${i === shopI ? 'on' : ''}${k.price === 0 || p?.skins?.includes(k.id) ? ' own' : ''}"></i>`).join('');
+  $('skinThumbs').innerHTML = SKINS.map((k, i) => {
+    const own = k.price === 0 || !!p?.skins?.includes(k.id);
+    const badge = equippedSkin === k.id ? `<b class="badge on">ON</b>` : own ? `<b class="badge own">${icon('check')}</b>` : `<b class="badge price">${k.price >= 1000 ? `${k.price / 1000}K` : k.price}</b>`;
+    return `<button class="thumb${i === shopI ? ' sel' : ''}${own ? '' : ' locked'}" data-i="${i}" aria-label="${k.name}"><img src="${k.thumb}" alt="" draggable="false">${badge}</button>`;
+  }).join('');
   const btn = $('skinAction');
   btn.disabled = false;
   if (equipped) { btn.textContent = 'EQUIPPED'; btn.disabled = true; }
@@ -1029,6 +1033,7 @@ async function previewSkin() {
 }
 
 function shopStep(d) {
+  if (!d) return;
   shopI = (shopI + d + SKINS.length) % SKINS.length;
   shopConfirm = false;
   $('shopMsg').textContent = '';
@@ -1038,6 +1043,10 @@ function shopStep(d) {
 
 $('shopBtn').addEventListener('click', openShop);
 $('skinPrev').addEventListener('click', () => shopStep(-1));
+$('skinThumbs').addEventListener('click', (e) => {
+  const b = e.target.closest('.thumb');
+  if (b) shopStep(Number(b.dataset.i) - shopI);
+});
 $('skinNext').addEventListener('click', () => shopStep(1));
 $('shopBack').addEventListener('click', () => {
   showScreen('menu');
