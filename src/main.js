@@ -1,10 +1,15 @@
 import * as THREE from 'three';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { Sound } from './audio.js';
-import { fetchTop, submitScore, cleanName, NAME_PATTERN } from './leaderboard.js';
+import { fetchTop, cleanName, NAME_PATTERN } from './leaderboard.js';
+import { Account } from './account.js';
 import {
-  LANE_W, LANES, PATH_W, GROUND_LEN, CHUNK,
+  SKINS, skinById, MissionRun, freshMissions, validMissions, missionText, setReward, dailyReady, nextDailyBonus,
+} from './progress.js';
+import {
+  LANE_W, LANES, PATH_W, GROUND_LEN, CHUNK, ROOF_Y, RAMP_LEN,
   makePathTexture, makeGrassTexture, makeSky, buildChunk, buildArch, OBSTACLES, PICKUPS,
+  buildShadesModel, heartTex, sparkleTex,
 } from './world.js';
 
 const $ = (id) => document.getElementById(id);
@@ -28,7 +33,8 @@ const SLIDE_TIME = 1.0;
 const START_SPEED = 13;
 const MAX_SPEED = 30;
 const INJURY_TIME = 6;
-const POWER_TIME = { beer: 9, boost: 5 };
+const POWER_TIME = { beer: 9, boost: 5, shades: 10 };
+const MAGNET_RANGE = 10; // how far ahead the Sexy Mode shades pull dumbbells from
 const TILE = 8; // path texture tile length (world units)
 
 // ---------- copy ----------
@@ -44,6 +50,7 @@ const ROASTS = {
 };
 const GENERIC_ROASTS = ['She’s not texting back, bro.', 'Worse than your Rocket League ranked games.', 'Should’ve skipped the 4th White Claw.', 'The blondes at Cowell saw that.'];
 const PHONE_QUIPS = ['Got her instagram!', 'She followed back!', 'Digits secured!', 'Got her number!'];
+const SEXY_QUIPS = ['They can’t resist him', 'Aura +1000', 'Dumbbells are throwing themselves at him', 'Too sexy to lift a finger', 'Blue lenses, bluer steel'];
 const MILESTONES = [
   [250, 'Warming up'], [500, 'Cardio king'], [1000, 'Beast mode'], [1500, 'Down to Cowell Beach'],
   [2000, 'Protein shake overdose'], [3000, 'Supersonic legend'], [5000, 'Touch grass, Sam'],
@@ -168,6 +175,52 @@ bubble.position.y = 0.95;
 bubble.visible = false;
 player.add(bubble);
 
+// Sexy Mode shades: worn on Sam's face, a pink aura, and hearts floating off him
+const aura = new THREE.Mesh(
+  new THREE.SphereGeometry(1.35, 20, 14),
+  new THREE.MeshBasicMaterial({ color: 0xff6fb5, transparent: true, opacity: 0.1, blending: THREE.AdditiveBlending, depthWrite: false }),
+);
+aura.position.y = 0.95;
+aura.visible = false;
+player.add(aura);
+const wornShades = buildShadesModel();
+wornShades.visible = false;
+const glint = new THREE.Sprite(new THREE.SpriteMaterial({ map: sparkleTex(), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+glint.position.set(0.045, 0.012, 0.012);
+glint.scale.setScalar(0.05);
+wornShades.add(glint);
+
+const heartMat = new THREE.SpriteMaterial({ map: heartTex(), transparent: true, depthWrite: false });
+const hearts = [];
+function emitHeart(x, y, z, size = 0.3) {
+  let h = hearts.find((k) => !k.sprite.visible);
+  if (!h) {
+    h = { sprite: new THREE.Sprite(heartMat.clone()) };
+    scene.add(h.sprite);
+    hearts.push(h);
+  }
+  h.sprite.visible = true;
+  h.sprite.position.set(x, y, z);
+  h.size = size;
+  h.t = 0;
+  h.life = rand(0.7, 1.1);
+  h.vx = rand(-0.8, 0.8);
+  h.vy = rand(1.2, 2.2);
+}
+function updateHearts(dt, dz) {
+  for (const h of hearts) {
+    if (!h.sprite.visible) continue;
+    h.t += dt;
+    const f = h.t / h.life;
+    if (f >= 1) { h.sprite.visible = false; continue; }
+    h.sprite.position.x += h.vx * dt;
+    h.sprite.position.y += h.vy * dt;
+    h.sprite.position.z += dz * 0.08; // mostly ride along with Sam instead of flying at the camera
+    h.sprite.scale.setScalar(h.size * Math.min(1, f * 5) * (1 + Math.sin(h.t * 14) * 0.08));
+    h.sprite.material.opacity = 1 - f * f;
+  }
+}
+
 function setAnim(name, fade = 0.25) {
   if (!mixer || currentAnim === name || !actions[name]) return;
   const next = actions[name];
@@ -208,8 +261,9 @@ function playOnce(name, timeScale, fade = 0.1) {
 }
 
 // ---------- loading ----------
-const FILES = [
-  ['sam', 'assets/sam.fbx', 12797412],
+// Animations load once and are shared by every skin (all skins use the same Mixamo rig).
+// A skin's model only downloads when it's equipped or previewed in the shop.
+const ANIM_FILES = [
   ['run', 'assets/anims/run.fbx', 222608],
   ['fast', 'assets/anims/fast.fbx', 208240],
   ['slow', 'assets/anims/slow.fbx', 230048],
@@ -220,25 +274,19 @@ const FILES = [
   ['slide', 'assets/anims/slide.fbx', 283040],
 ];
 const LOAD_LINES = ['Loading Sam’s pre-workout…', 'Hitting the gym…', 'Fixing his hair…', 'Texting the group chat…', 'Queueing Rocket League…', 'Stretching hamstrings…'];
+const fbx = new FBXLoader();
+const clips = {};
+const skinModels = {};
+const skinLoads = {};
+let shownSkin = null;
+let equippedSkin = store.get('samrun.equipped', 'sam');
 
-async function load() {
-  const loader = new FBXLoader();
-  const total = FILES.reduce((a, f) => a + f[2], 0);
-  const loaded = {};
-  let lineI = 0;
-  const lineTimer = setInterval(() => { $('loadText').textContent = LOAD_LINES[++lineI % LOAD_LINES.length]; }, 1400);
-  const bump = () => {
-    const sum = Object.values(loaded).reduce((a, b) => a + b, 0);
-    $('barFill').style.width = `${Math.min(97, (sum / total) * 100)}%`;
-  };
-  const objs = await Promise.all(FILES.map(([key, url, size]) => new Promise((resolve, reject) => {
-    loader.load(url, (o) => { loaded[key] = size; bump(); resolve([key, o]); }, (e) => { loaded[key] = Math.min(e.loaded, size); bump(); }, reject);
-  })));
-  clearInterval(lineTimer);
-  const byKey = Object.fromEntries(objs);
+function loadFBX(url, onProgress) {
+  return new Promise((resolve, reject) => fbx.load(url, resolve, onProgress, reject));
+}
 
-  sam = byKey.sam;
-  sam.traverse((o) => {
+function prepModel(model) {
+  model.traverse((o) => {
     if (o.isMesh) {
       o.castShadow = true;
       o.frustumCulled = false;
@@ -250,15 +298,49 @@ async function load() {
       }
     }
   });
-  const box = new THREE.Box3().setFromObject(sam);
-  sam.scale.multiplyScalar(SAM_HEIGHT / (box.max.y - box.min.y));
-  samInner.add(sam);
+  const box = new THREE.Box3().setFromObject(model);
+  model.scale.multiplyScalar(SAM_HEIGHT / (box.max.y - box.min.y));
+  // Ground the model using an animated pose — the T-pose rest skeleton sits at a different hip height.
+  const m = new THREE.AnimationMixer(model);
+  m.clipAction(clips.run).play();
+  m.update(0);
+  model.updateMatrixWorld(true);
+  model.traverse((o) => { if (o.isSkinnedMesh) o.computeBoundingBox(); });
+  model.position.y -= new THREE.Box3().setFromObject(model).min.y;
+  m.stopAllAction();
+  m.uncacheRoot(model);
+  // Sexy Mode shades anchor on the head bone, sized in world units whatever the model's scale.
+  model.updateMatrixWorld(true);
+  const head = model.getObjectByName('mixamorigHead') || model.getObjectByName('mixamorig:Head');
+  if (head) {
+    const ws = head.getWorldScale(new THREE.Vector3()).x;
+    const anchor = new THREE.Group();
+    anchor.name = 'shadesAnchor';
+    anchor.scale.setScalar(1 / ws);
+    anchor.position.set(0, 0.085 / ws, 0.095 / ws);
+    head.add(anchor);
+  }
+  return model;
+}
 
+function loadSkin(id, onProgress) {
+  return (skinLoads[id] ||= loadFBX(skinById(id).file, onProgress)
+    .then((model) => (skinModels[id] = prepModel(model)))
+    .catch((err) => { delete skinLoads[id]; throw err; }));
+}
+
+// Swap the visible character to a loaded skin, keeping whatever animation was playing.
+function showSkin(id) {
+  const model = skinModels[id];
+  if (!model || shownSkin === id) return;
+  const prev = currentAnim;
+  if (mixer) mixer.stopAllAction();
+  if (sam) samInner.remove(sam);
+  sam = model;
+  samInner.add(sam);
+  shownSkin = id;
   mixer = new THREE.AnimationMixer(sam);
-  for (const key of ['run', 'fast', 'slow', 'injured', 'drunk', 'dance', 'jump', 'slide']) {
-    const clip = byKey[key].animations[0];
-    if (!clip) continue;
-    if (key !== 'dance') inPlace(clip, key === 'jump');
+  for (const [key, clip] of Object.entries(clips)) {
     const a = mixer.clipAction(clip);
     if (key === 'jump' || key === 'slide') {
       a.setLoop(THREE.LoopOnce, 1);
@@ -266,14 +348,33 @@ async function load() {
     }
     actions[key] = a;
   }
+  currentAnim = null;
+  setAnim(prev || 'dance', 0);
+  sam.getObjectByName('shadesAnchor')?.add(wornShades);
+}
 
-  // Ground Sam using an animated pose — the T-pose rest skeleton sits at a different hip height.
-  actions.run.play();
-  mixer.update(0);
-  sam.updateMatrixWorld(true);
-  sam.traverse((o) => { if (o.isSkinnedMesh) o.computeBoundingBox(); });
-  sam.position.y -= new THREE.Box3().setFromObject(sam).min.y;
-  actions.run.stop();
+async function load() {
+  const total = ANIM_FILES.reduce((a, f) => a + f[2], 0) + 12.8e6;
+  const loaded = {};
+  let lineI = 0;
+  const lineTimer = setInterval(() => { $('loadText').textContent = LOAD_LINES[++lineI % LOAD_LINES.length]; }, 1400);
+  const bump = () => {
+    const sum = Object.values(loaded).reduce((a, b) => a + b, 0);
+    $('barFill').style.width = `${Math.min(97, (sum / total) * 100)}%`;
+  };
+  const anims = await Promise.all(ANIM_FILES.map(([key, url, size]) => loadFBX(url, (e) => { loaded[key] = Math.min(e.loaded, size); bump(); })
+    .then((o) => { loaded[key] = size; bump(); return [key, o]; })));
+  for (const [key, o] of anims) {
+    const clip = o.animations[0];
+    if (!clip) continue;
+    if (key !== 'dance') inPlace(clip, key === 'jump');
+    clips[key] = clip;
+  }
+  if (!SKINS.some((k) => k.id === equippedSkin)) equippedSkin = 'sam';
+  const skinProgress = (e) => { loaded.skin = Math.min(e.loaded, 12.8e6); bump(); };
+  try { await loadSkin(equippedSkin, skinProgress); } catch { equippedSkin = 'sam'; await loadSkin('sam', skinProgress); }
+  clearInterval(lineTimer);
+  showSkin(equippedSkin);
   $('barFill').style.width = '100%';
 }
 
@@ -296,7 +397,13 @@ let runTime = 0;
 let injuredT = 0;
 let invulnT = 0;
 let shield = false;
-const power = { beer: 0, boost: 0 };
+const power = { beer: 0, boost: 0, shades: 0 };
+let ground = 0; // height of whatever Sam is standing on (0, a ramp, or a bus roof)
+// per-run counters for missions
+let run = {};
+let missions = loadLocalMissions();
+let missionRun = null;
+let lastResult = null; // the finished run, kept so a guest can bank it after signing in
 let shake = 0;
 let introT = 0;
 let dyingT = 0;
@@ -316,6 +423,11 @@ const obstacles = [];
 const pickups = [];
 const pools = {};
 
+function loadLocalMissions() {
+  const m = store.get('samrun.missions', null);
+  return validMissions(m) ? m : freshMissions();
+}
+
 function spawnObstacle(type, x, z, vz = 0) {
   const def = OBSTACLES[type];
   const pool = (pools[type] ||= []);
@@ -324,7 +436,7 @@ function spawnObstacle(type, x, z, vz = 0) {
   mesh.visible = true;
   mesh.position.set(x, 0, z);
   mesh.rotation.set(0, 0, 0);
-  const e = { type, mesh, x, z, vz, w: def.w, len: def.len, bottom: def.bottom, top: def.top, dead: false, fly: null };
+  const e = { type, mesh, x, z, vz, w: def.w, len: def.len, bottom: def.bottom, top: def.top, ramp: !!def.ramp, dead: false, fly: null, passed: false, used: false };
   obstacles.push(e);
   return e;
 }
@@ -336,7 +448,7 @@ function spawnPickup(type, x, z, y) {
   if (!mesh.parent) scene.add(mesh);
   mesh.visible = true;
   mesh.scale.setScalar(1);
-  const e = { type, mesh, x, z, y: y ?? def.y, taken: false, t: Math.random() * 6 };
+  const e = { type, mesh, x, z, y: y ?? def.y, taken: false, rizzed: false, t: Math.random() * 6 };
   mesh.position.set(x, e.y, z);
   pickups.push(e);
   return e;
@@ -361,10 +473,21 @@ function coinArc(laneI, z) {
   }
 }
 
-function spawnPower(laneI, z) {
+function spawnPower(laneI, z, y) {
   const r = Math.random();
-  const type = r < 0.28 ? 'beer' : r < 0.52 ? 'boost' : r < 0.78 ? 'shake' : 'phone';
-  spawnPickup(type, LANES[laneI], z);
+  const type = r < 0.22 ? 'beer' : r < 0.42 ? 'boost' : r < 0.62 ? 'shake' : r < 0.82 ? 'shades' : 'phone';
+  spawnPickup(type, LANES[laneI], z, y);
+}
+
+// A parked bus you can run up onto. zFront is where the ramp's low end starts.
+function busWithRamp(laneI, zFront, cars = 1) {
+  spawnObstacle('ramp', LANES[laneI], zFront - RAMP_LEN / 2);
+  for (let k = 0; k < cars; k++) spawnObstacle('bus', LANES[laneI], zFront - RAMP_LEN - 5 - k * 10.6);
+  const roofLen = cars * 10.6;
+  // dumbbells up the ramp and along the roof
+  for (let k = 0; k < 3; k++) spawnPickup('gains', LANES[laneI], zFront - 1 - k * 2, 0.9 + (1 + k * 2) / RAMP_LEN * ROOF_Y);
+  for (let d = 1; d < roofLen - 1; d += 2.3) spawnPickup('gains', LANES[laneI], zFront - RAMP_LEN - d, ROOF_Y + 0.9);
+  return RAMP_LEN + roofLen;
 }
 
 function spawnRow(z) {
@@ -376,16 +499,26 @@ function spawnRow(z) {
   let free = [];
   let bus = false;
 
+  let extra = 0; // how much longer than a normal row this pattern runs
   if (d < 140) {
     const t = pick(['slug', 'turkey', 'log', 'banner']);
     spawnObstacle(t, LANES[lanes[0]], z);
     free = [lanes[1], lanes[2]];
   } else if (r < 0.16) {
-    // one bus + one small
+    // one bus + one small; parked buses usually get a ramp
     const oncoming = d > 500 && rowsSinceBus >= 5 && Math.random() < 0.35;
     bus = true;
-    spawnObstacle('bus', LANES[lanes[0]], z - 5, oncoming ? 7 : 0);
+    if (!oncoming && Math.random() < 0.5) extra = busWithRamp(lanes[0], z + 4) - 10;
+    else spawnObstacle('bus', LANES[lanes[0]], z - 5, oncoming ? 7 : 0);
     spawnObstacle(pick(small), LANES[lanes[1]], z);
+    free = [lanes[2]];
+  } else if (r < 0.22 && rowsSinceBus >= 1) {
+    // bus train: 2-3 parked buses end to end behind a ramp, with a parked bus beside it
+    bus = true;
+    const cars = d > 700 && Math.random() < 0.5 ? 3 : 2;
+    extra = busWithRamp(lanes[0], z + 4, cars) - 10;
+    spawnObstacle('bus', LANES[lanes[1]], z - RAMP_LEN - 2 - rand(0, 6));
+    if (Math.random() < 0.3) spawnPower(lanes[0], z - RAMP_LEN - cars * 10.6 + 3, ROOF_Y + 1);
     free = [lanes[2]];
   } else if (r < 0.28) {
     bus = true;
@@ -411,6 +544,7 @@ function spawnRow(z) {
   }
 
   rowsSinceBus = bus ? 0 : rowsSinceBus + 1;
+  sinceRow -= extra; // leave room so the next row doesn't land on top of a long bus train
 
   if (free.length) {
     const fl = pick(free);
@@ -426,12 +560,20 @@ function resetRun() {
   speed = 0; distance = 0; score = 0; gains = 0; digits = 0; smashes = 0; runTime = 0;
   injuredT = 0; invulnT = 0; shield = false; power.beer = 0; power.boost = 0;
   shake = 0; milestoneI = 0; sinceRow = 0; rowGap = 24; rowsSinceBus = 99; killer = null; sinceArch = 0;
+  power.shades = 0; ground = 0; camGround = 0;
+  run = { gains: 0, distance: 0, jumps: 0, banners: 0, roof: 0, ramps: 0, digits: 0, smash: 0, shades: 0, rizzGains: 0, clean: 0, drunkGains: 0, sinceHit: 0 };
+  missionRun = new MissionRun(missions);
+  lastResult = null;
+  wornShades.visible = false;
+  aura.visible = false;
+  for (const h of hearts) h.sprite.visible = false;
   player.position.set(0, 0, 0);
   player.rotation.set(0, 0, 0);
   samInner.visible = true;
   if (mixer) mixer.timeScale = 1;
   // pre-populate the road ahead
-  for (let z = -45; z > SPAWN_Z; z -= 24) spawnRow(z);
+  for (let z = -45; z > SPAWN_Z; z -= 24) { sinceRow = 0; spawnRow(z); }
+  sinceRow = 0;
   arch.position.z = -120;
   lastHud = {};
 }
@@ -463,6 +605,7 @@ function updatePowersHud() {
   const items = [];
   if (power.boost > 0) items.push(['boost', power.boost / POWER_TIME.boost]);
   if (power.beer > 0) items.push(['cup', power.beer / POWER_TIME.beer]);
+  if (power.shades > 0) items.push(['shades', power.shades / POWER_TIME.shades]);
   if (shield) items.push(['shake', 1]);
   if (injuredT > 0) items.push(['bandage', injuredT / INJURY_TIME]);
   const key = items.map((i) => i[0] + Math.round(i[1] * 40)).join();
@@ -472,7 +615,7 @@ function updatePowersHud() {
 }
 
 function showScreen(id) {
-  for (const s of ['loading', 'menu', 'pause', 'over', 'board']) $(s).classList.toggle('hidden', s !== id);
+  for (const s of ['loading', 'menu', 'pause', 'over', 'board', 'missions', 'account', 'shop']) $(s).classList.toggle('hidden', s !== id);
   $('hud').classList.toggle('hidden', !(id === null || id === 'pause'));
 }
 
@@ -490,6 +633,7 @@ function act(a) {
   else if (a === 'up') {
     if (grounded) {
       vy = JUMP_V; grounded = false; slideT = 0; queuedSlide = false;
+      run.jumps++;
       Sound.play('jump');
       playOnce('jump', actions.jump ? actions.jump.getClip().duration / (2 * JUMP_V / GRAVITY) : 1);
     }
@@ -500,7 +644,7 @@ function act(a) {
 }
 
 window.addEventListener('keydown', (e) => {
-  if (e.target instanceof HTMLInputElement || !$('board').classList.contains('hidden')) return;
+  if (e.target instanceof HTMLInputElement || ['board', 'missions', 'account', 'shop'].some((id) => !$(id).classList.contains('hidden'))) return;
   const k = e.key;
   if (['ArrowLeft', 'a', 'A'].includes(k)) act('left');
   else if (['ArrowRight', 'd', 'D'].includes(k)) act('right');
@@ -579,14 +723,12 @@ $('shareBtn').addEventListener('click', async () => {
 document.addEventListener('visibilitychange', () => { if (document.hidden && (state === 'run' || state === 'intro')) togglePause(); });
 
 function togglePause() {
-  if (state === 'run' || state === 'intro') { prevState = state; state = 'paused'; showScreen('pause'); Sound.music(null); Sound.boost(false); }
+  if (state === 'run' || state === 'intro') { prevState = state; state = 'paused'; renderMissions($('pauseMissions')); showScreen('pause'); Sound.music(null); Sound.boost(false); }
   else if (state === 'paused') { state = prevState || 'run'; showScreen(null); clock.getDelta(); Sound.music('run'); if (power.boost > 0) Sound.boost(true); }
 }
 
 // ---------- leaderboard ----------
-let posted = false;
 let boardReturn = 'menu';
-let myName = store.get('samrun.name', '');
 
 function setSubmitMsg(text, err = false) {
   const el = $('submitMsg');
@@ -594,47 +736,10 @@ function setSubmitMsg(text, err = false) {
   el.classList.toggle('err', err);
 }
 
-function prepareNameForm() {
-  posted = false;
-  $('nameInput').value = myName;
-  $('nameInput').disabled = false;
-  $('postBtn').disabled = false;
-  $('postBtn').textContent = 'POST';
-  setSubmitMsg(Math.floor(score) > 0 ? 'Put your name on the board' : '');
-}
-
-$('nameInput').addEventListener('input', (e) => {
-  const v = cleanName(e.target.value);
-  if (v !== e.target.value) e.target.value = v;
-});
-
-$('nameForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  if (posted) return;
-  const name = cleanName($('nameInput').value).trim();
-  if (!name || !NAME_PATTERN.test(name)) { setSubmitMsg('Type a name first', true); return; }
-  $('nameInput').blur();
-  $('postBtn').disabled = true;
-  $('nameInput').disabled = true;
-  setSubmitMsg('Posting…');
-  try {
-    const r = await submitScore({ name, score, distance, gains, digits, smashes, duration: runTime });
-    posted = true;
-    myName = name;
-    store.set('samrun.name', name);
-    $('postBtn').textContent = 'POSTED';
-    setSubmitMsg(r.improved ? `You're #${r.rank} on the board!` : `Your best is still ${r.best.toLocaleString()} (#${r.rank})`);
-  } catch (err) {
-    const m = String(err.message || '');
-    setSubmitMsg(m.includes('slow down') ? 'Slow down, try again in a sec' : m.includes('invalid run') ? 'That run looks sus. Not posted.' : 'Couldn’t post. Check your connection.', true);
-    $('postBtn').disabled = false;
-    $('nameInput').disabled = false;
-  }
-});
-
 async function openBoard(from) {
   boardReturn = from;
   showScreen('board');
+  const myName = Account.profile?.name;
   const list = $('boardList');
   list.innerHTML = '<li class="note">Loading…</li>';
   try {
@@ -663,10 +768,320 @@ $('menuBoardBtn').addEventListener('click', () => openBoard('menu'));
 $('overBoardBtn').addEventListener('click', () => openBoard('over'));
 $('boardBack').addEventListener('click', () => showScreen(boardReturn));
 
+// ---------- missions ----------
+function saveMissions() {
+  store.set('samrun.missions', missions);
+}
+
+function renderMissions(el) {
+  el.innerHTML = missions.list.map((m, i) => {
+    const done = m.prog >= m.target;
+    const f = Math.min(1, m.prog / m.target);
+    return `<div class="mission${done ? ' done' : ''}">${done ? icon('check') : `<span class="num">${i + 1}</span>`}
+      <div><div class="mt">${missionText(m)}</div><div class="bar2"><i style="width:${(f * 100).toFixed(0)}%"></i></div>
+      <div class="mp">${done ? 'Done!' : `${m.prog.toLocaleString()} / ${m.target.toLocaleString()}`}</div></div></div>`;
+  }).join('');
+}
+
+function openMissions() {
+  renderMissions($('missionList'));
+  $('missionSet').textContent = `Set ${missions.set + 1}`;
+  const allDone = missions.list.every((m) => m.prog >= m.target);
+  $('missionReward').textContent = allDone
+    ? (Account.signedIn ? `Set complete! +${setReward(missions.set)} on your next run` : `Set complete! Sign in to bank +${setReward(missions.set)}`)
+    : `Finish all 3 for +${setReward(missions.set).toLocaleString()} dumbbells`;
+  const p = Account.profile;
+  $('missionDaily').textContent = !p ? 'Sign in for a daily bonus streak'
+    : dailyReady(p) ? `Daily bonus ready: +${nextDailyBonus(p)} on your next run`
+      : `Day ${p.dailyStreak} streak. Come back tomorrow for +${nextDailyBonus({ ...p, dailyDay: todayMinus(1) })}`;
+  showScreen('missions');
+}
+const todayMinus = (n) => new Date(Date.now() - n * 864e5).toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
+
+$('missionsBtn').addEventListener('click', openMissions);
+$('missionsBack').addEventListener('click', () => showScreen('menu'));
+
+// ---------- account ----------
+let accountReturn = 'menu';
+let accountMode = 'create';
+let nameCheckTimer = 0;
+
+function setAcctMsg(text, err = false) {
+  $('acctMsg').textContent = text;
+  $('acctMsg').classList.toggle('err', err);
+}
+
+function setAccountMode(mode) {
+  accountMode = mode;
+  $('tabCreate').classList.toggle('on', mode === 'create');
+  $('tabSignIn').classList.toggle('on', mode === 'signin');
+  $('acctSubmit').textContent = mode === 'create' ? 'CREATE ACCOUNT' : 'SIGN IN';
+  $('acctPass').autocomplete = mode === 'create' ? 'new-password' : 'current-password';
+  $('acctHint').textContent = mode === 'create' ? 'Pick a password you’ll remember. There’s no email reset.' : '';
+  $('acctHint').classList.remove('err');
+  setAcctMsg('');
+  if (mode === 'create') checkName();
+}
+
+function openAccount(from, mode = 'create') {
+  accountReturn = from;
+  const signedIn = Account.signedIn;
+  $('accountGuest').classList.toggle('hidden', signedIn);
+  $('accountUser').classList.toggle('hidden', !signedIn);
+  $('accountTitle').textContent = signedIn ? 'ACCOUNT' : mode === 'create' ? 'JOIN UP' : 'WELCOME BACK';
+  if (signedIn) $('acctWho').textContent = `Signed in as ${Account.profile.name}`;
+  else { $('acctPass').value = ''; setAccountMode(mode); }
+  showScreen('account');
+}
+
+function checkName() {
+  clearTimeout(nameCheckTimer);
+  const name = cleanName($('acctName').value).trim();
+  const hint = $('acctHint');
+  if (accountMode !== 'create' || !name) return;
+  nameCheckTimer = setTimeout(async () => {
+    try {
+      const st = await Account.nameStatus(name);
+      if (cleanName($('acctName').value).trim() !== name || accountMode !== 'create') return;
+      if (st.taken) { hint.textContent = `${name} is taken. Is it you? Sign in instead.`; hint.classList.add('err'); }
+      else if (st.legacy != null) { hint.textContent = `${name} is on the board with ${st.legacy.toLocaleString()}. Creating this account claims that score.`; hint.classList.remove('err'); }
+      else { hint.textContent = 'Name’s free. Pick a password you’ll remember.'; hint.classList.remove('err'); }
+    } catch { /* offline: the submit will say so */ }
+  }, 350);
+}
+
+$('acctName').addEventListener('input', (e) => {
+  const v = cleanName(e.target.value);
+  if (v !== e.target.value) e.target.value = v;
+  checkName();
+});
+$('tabCreate').addEventListener('click', () => { setAccountMode('create'); $('accountTitle').textContent = 'JOIN UP'; });
+$('tabSignIn').addEventListener('click', () => { setAccountMode('signin'); $('accountTitle').textContent = 'WELCOME BACK'; });
+
+const ACCOUNT_ERRORS = {
+  'name taken': 'That name is taken. Sign in if it’s you.',
+  'invalid name': 'Letters, numbers and spaces only (12 max).',
+  'invalid password': 'Password needs at least 4 characters.',
+  'wrong name or password': 'Wrong name or password.',
+  'too many tries': 'Too many tries. Wait 5 minutes.',
+};
+
+$('accountForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name = cleanName($('acctName').value).trim();
+  const pass = $('acctPass').value;
+  if (!name || !NAME_PATTERN.test(name)) { setAcctMsg('Type a name first', true); return; }
+  if (pass.length < 4) { setAcctMsg('Password needs at least 4 characters.', true); return; }
+  document.activeElement?.blur();
+  $('acctSubmit').disabled = true;
+  setAcctMsg(accountMode === 'create' ? 'Creating…' : 'Signing in…');
+  try {
+    if (accountMode === 'create') {
+      const r = await Account.signUp(name, pass);
+      // bring the guest's mission progress into the new account
+      Account.saveMissions(missions);
+      if (r.claimed != null) toast('SCORE CLAIMED', `${r.claimed.toLocaleString()} is yours + ${r.welcome.toLocaleString()} dumbbells`);
+      else toast(`WELCOME ${r.profile.name}`);
+    } else {
+      const r = await Account.signIn(name, pass);
+      adoptServerMissions(r.profile);
+      toast(`WELCOME BACK ${r.profile.name}`);
+    }
+    $('acctPass').value = '';
+    setAcctMsg('');
+    if (accountReturn === 'over' && lastResult && !lastResult.banked) {
+      showScreen('over');
+      bankRun();
+    } else showScreen(accountReturn);
+  } catch (err) {
+    const m = String(err.message || '');
+    setAcctMsg(ACCOUNT_ERRORS[m] || 'Couldn’t reach the server. Check your connection.', true);
+  } finally {
+    $('acctSubmit').disabled = false;
+  }
+});
+
+$('signOutBtn').addEventListener('click', async () => {
+  await Account.signOut();
+  showScreen(accountReturn === 'over' ? 'over' : 'menu');
+});
+$('accountBack').addEventListener('click', () => showScreen(accountReturn));
+$('accountBtn').addEventListener('click', () => openAccount('menu', 'create'));
+$('saveCreateBtn').addEventListener('click', () => openAccount('over', 'create'));
+$('saveSignInBtn').addEventListener('click', () => openAccount('over', 'signin'));
+
+// Signed in on another device? Their missions live on the server.
+function adoptServerMissions(profile) {
+  if (validMissions(profile?.missions)) { missions = profile.missions; saveMissions(); }
+  else Account.saveMissions(missions);
+}
+
+function syncAccountUi() {
+  const p = Account.profile;
+  for (const el of document.querySelectorAll('.walletAmt')) el.textContent = (p?.coins ?? 0).toLocaleString();
+  for (const el of document.querySelectorAll('.wallet')) el.classList.toggle('hidden', !p);
+  $('accountLabel').textContent = p ? p.name : 'SIGN IN';
+  if (p) best = Math.max(best, p.best || 0);
+  $('bestLine').textContent = best ? `Personal record: ${best.toLocaleString()}` : 'Cowell’s finest. Allegedly.';
+  const daily = p && dailyReady(p);
+  $('dailyLine').classList.toggle('hidden', !daily);
+  if (daily) $('dailyLine').textContent = `Daily bonus ready: +${nextDailyBonus(p)} dumbbells`;
+  $('missionsDot').classList.toggle('hidden', !missions.list.every((m) => m.prog >= m.target));
+  // wear the equipped skin (guests are always plain Sam)
+  const want = p?.equipped || 'sam';
+  if (want !== equippedSkin) setEquipped(want);
+}
+Account.onChange(syncAccountUi);
+
+function setEquipped(id) {
+  equippedSkin = id;
+  store.set('samrun.equipped', id);
+  if (!clips.run) return; // still booting: load() picks up equippedSkin itself
+  if (state === 'menu' && !$('shop').classList.contains('hidden')) return; // the shop controls the preview
+  loadSkin(id).then(() => { if (equippedSkin === id) showSkin(id); }).catch(() => {});
+}
+
+// ---------- end of run: bank dumbbells + post the score ----------
+async function bankRun() {
+  const r = lastResult;
+  if (!r || r.banked || r.banking) return;
+  r.banking = true;
+  const before = JSON.parse(JSON.stringify(missions));
+  const bonus = new MissionRun(missions).finish(); // advances the set if it's complete
+  $('saveCard').classList.add('hidden');
+  $('bankBox').classList.remove('hidden');
+  $('bankLine').innerHTML = `${icon('dumbbell')} Banking…`;
+  $('bankExtra').textContent = '';
+  setSubmitMsg('');
+  try {
+    const res = await Account.finishRun(r, bonus, missions);
+    r.banked = true;
+    saveMissions();
+    $('bankLine').innerHTML = `${icon('dumbbell')} +${res.banked.toLocaleString()} BANKED`;
+    const extra = [];
+    if (res.bonus) extra.push(`Mission set +${res.bonus.toLocaleString()}`);
+    if (res.daily) extra.push(`Day ${res.streak} streak +${res.daily.toLocaleString()}`);
+    extra.push(`Wallet: ${res.profile.coins.toLocaleString()}`);
+    $('bankExtra').textContent = extra.join(' · ');
+    setSubmitMsg(res.improved ? `You're #${res.rank} on the board!` : `Your best is still ${res.best.toLocaleString()} (#${res.rank})`);
+  } catch (err) {
+    missions = before;
+    saveMissions();
+    const m = String(err.message || '');
+    $('bankLine').innerHTML = `${icon('dumbbell')} Not banked`;
+    if (m.includes('not signed in')) { showGuestSave(); setSubmitMsg('Signed out. Sign in again to save this run.', true); }
+    else setSubmitMsg(m.includes('slow down') ? 'Slow down, try again in a sec' : m.includes('invalid run') ? 'That run looks sus. Not posted.' : 'Couldn’t save the run. Check your connection.', true);
+  } finally {
+    r.banking = false;
+  }
+}
+
+function showGuestSave() {
+  const r = lastResult;
+  $('bankBox').classList.add('hidden');
+  $('saveCard').classList.remove('hidden');
+  const setDone = missions.list.every((m) => m.prog >= m.target);
+  $('saveText').innerHTML = `Create an account to put <b>${Math.floor(r.score).toLocaleString()}</b> on the leaderboard and bank <b>${r.gains.toLocaleString()}</b> dumbbells`
+    + (setDone ? ` + <b>${setReward(missions.set).toLocaleString()}</b> for your mission set` : '')
+    + '. Spend them on skins.';
+}
+
+// ---------- skins shop ----------
+let shopI = 0;
+let shopConfirm = false;
+
+function openShop() {
+  shopI = Math.max(0, SKINS.findIndex((k) => k.id === equippedSkin));
+  shopConfirm = false;
+  showScreen('shop');
+  $('shopMsg').textContent = '';
+  renderShop();
+  previewSkin();
+}
+
+function renderShop() {
+  const skin = SKINS[shopI];
+  const p = Account.profile;
+  const owned = skin.price === 0 || !!p?.skins?.includes(skin.id);
+  const equipped = equippedSkin === skin.id;
+  $('skinName').textContent = skin.name;
+  $('skinTag').textContent = skin.tag;
+  $('skinDots').innerHTML = SKINS.map((k, i) => `<i class="${i === shopI ? 'on' : ''}${k.price === 0 || p?.skins?.includes(k.id) ? ' own' : ''}"></i>`).join('');
+  const btn = $('skinAction');
+  btn.disabled = false;
+  if (equipped) { btn.textContent = 'EQUIPPED'; btn.disabled = true; }
+  else if (owned) btn.textContent = 'EQUIP';
+  else if (!p) btn.innerHTML = `SIGN IN TO BUY · ${icon('dumbbell')} ${skin.price.toLocaleString()}`;
+  else if (shopConfirm) btn.innerHTML = `TAP TO CONFIRM · ${icon('dumbbell')} ${skin.price.toLocaleString()}`;
+  else btn.innerHTML = `BUY · ${icon('dumbbell')} ${skin.price.toLocaleString()}`;
+}
+
+async function previewSkin() {
+  const id = SKINS[shopI].id;
+  if (!skinModels[id]) $('shopSpin').classList.remove('hidden');
+  try {
+    await loadSkin(id);
+    if (SKINS[shopI].id === id && !$('shop').classList.contains('hidden')) showSkin(id);
+  } catch {
+    if (SKINS[shopI].id === id) $('shopMsg').textContent = 'Couldn’t load this skin. Check your connection.';
+  }
+  if (SKINS[shopI].id === id) $('shopSpin').classList.add('hidden');
+}
+
+function shopStep(d) {
+  shopI = (shopI + d + SKINS.length) % SKINS.length;
+  shopConfirm = false;
+  $('shopMsg').textContent = '';
+  renderShop();
+  previewSkin();
+}
+
+$('shopBtn').addEventListener('click', openShop);
+$('skinPrev').addEventListener('click', () => shopStep(-1));
+$('skinNext').addEventListener('click', () => shopStep(1));
+$('shopBack').addEventListener('click', () => {
+  showScreen('menu');
+  loadSkin(equippedSkin).then(() => showSkin(equippedSkin)).catch(() => {});
+});
+$('skinAction').addEventListener('click', async () => {
+  const skin = SKINS[shopI];
+  const p = Account.profile;
+  const owned = skin.price === 0 || !!p?.skins?.includes(skin.id);
+  if (!p && !owned) { openAccount('shop', 'create'); return; }
+  const btn = $('skinAction');
+  try {
+    if (owned) {
+      btn.disabled = true;
+      if (p) await Account.equip(skin.id);
+      else equippedSkin = skin.id;
+      store.set('samrun.equipped', skin.id);
+      equippedSkin = skin.id;
+      toast(`${skin.name.toUpperCase()}`, 'Equipped');
+    } else if (!shopConfirm) {
+      if (p.coins < skin.price) { $('shopMsg').textContent = `Need ${(skin.price - p.coins).toLocaleString()} more dumbbells. Keep running.`; return; }
+      shopConfirm = true;
+    } else {
+      btn.disabled = true;
+      await Account.buy(skin.id);
+      equippedSkin = skin.id;
+      store.set('samrun.equipped', skin.id);
+      shopConfirm = false;
+      Sound.play('horn', { vol: 0.6 });
+      toast(`${skin.name.toUpperCase()}`, 'Unlocked and equipped');
+    }
+  } catch (err) {
+    const m = String(err.message || '');
+    $('shopMsg').textContent = m.includes('not enough') ? 'Not enough dumbbells.' : m.includes('not signed in') ? 'Signed out. Sign in again.' : 'Couldn’t reach the server.';
+    shopConfirm = false;
+  }
+  renderShop();
+});
+
 // ---------- flow ----------
 const MENU_CAM = new THREE.Vector3(0.7, 1.25, 4.0);
 const MENU_LOOK = new THREE.Vector3(0, 0.55, 0);
 const camLook = new THREE.Vector3();
+let camGround = 0;
 
 function toMenu() {
   state = 'menu';
@@ -675,10 +1090,10 @@ function toMenu() {
   for (let i = pickups.length - 1; i >= 0; i--) recycle(pickups, i, 'p_');
   setAnim('dance', 0.4);
   player.rotation.y = Math.PI; // face the camera while dancing
-  $('bestLine').textContent = best ? `Personal record: ${best.toLocaleString()}` : 'Cowell’s finest. Allegedly.';
   $('drunkfx').classList.remove('on');
   Sound.boost(false);
   Sound.music('theme');
+  syncAccountUi();
   showScreen('menu');
 }
 
@@ -711,8 +1126,13 @@ function gameOver() {
   $('oDigits').textContent = digits;
   $('newBest').classList.toggle('hidden', !isBest);
   $('oBest').textContent = isBest ? '' : `Personal record: ${best.toLocaleString()}`;
-  prepareNameForm();
   $('drunkfx').classList.remove('on');
+  missionRun?.update(run);
+  saveMissions();
+  lastResult = { score, distance, gains, digits, smashes, duration: runTime, banked: false };
+  setSubmitMsg('');
+  if (Account.signedIn) bankRun();
+  else showGuestSave();
 }
 
 function hit(o) {
@@ -725,6 +1145,7 @@ function hit(o) {
   shake = 0.5;
   flashRed();
   killer = o.type;
+  run.sinceHit = 0;
   // Clipping the side of a bus bounces you back; running into its front is game over.
   const busSide = o.type === 'bus' && o.z + o.len / 2 > 1.4;
   if (injuredT > 0 || (o.type === 'bus' && !busSide)) {
@@ -744,6 +1165,7 @@ function hit(o) {
 function smash(o) {
   o.dead = true;
   smashes++;
+  if (power.boost > 0) run.smash++;
   o.fly = { vy: rand(7, 10), vx: (o.x >= px ? 1 : -1) * rand(4, 8), spin: rand(-8, 8) };
   score += 50 * (power.beer > 0 ? 2 : 1);
   Sound.play('hit', { vol: 0.6, rate: 1.3 });
@@ -754,7 +1176,12 @@ function collect(p) {
   p.taken = true;
   const mult = power.beer > 0 ? 2 : 1;
   switch (p.type) {
-    case 'gains': gains++; score += 10 * mult; Sound.play('gains', { rate: rand(0.95, 1.08) }); break;
+    case 'gains':
+      gains++; run.gains++; score += 10 * mult;
+      if (power.beer > 0) run.drunkGains++;
+      if (p.rizzed) { run.rizzGains++; emitHeart(px + rand(-0.3, 0.3), py + 1.6, 0.2, 0.22); }
+      Sound.play('gains', { rate: p.rizzed ? rand(1.15, 1.3) : rand(0.95, 1.08) });
+      break;
     case 'beer': power.beer = POWER_TIME.beer; Sound.play('drink'); toast(`${icon('cup')} DRUNK MODE`, '2x points'); $('drunkfx').classList.add('on'); break;
     case 'boost': power.boost = POWER_TIME.boost; Sound.boost(true); toast(`${icon('boost')} SUPERSONIC`, 'Smash through everything'); break;
     case 'shake':
@@ -762,8 +1189,36 @@ function collect(p) {
       if (injuredT > 0) { injuredT = 0; toast(`${icon('shake')} PROTEIN SHAKE`, 'Fully healed. Gains restored'); }
       else { shield = true; toast(`${icon('shake')} PROTEIN SHAKE`, 'Shield up'); }
       break;
-    case 'phone': digits++; score += 250 * mult; Sound.play('phone'); toast(`${icon('phone')} ${pick(PHONE_QUIPS)}`, `+${250 * mult}`); break;
+    case 'shades':
+      power.shades = POWER_TIME.shades; run.shades++;
+      Sound.play('phone', { rate: 1.25, vol: 0.7 });
+      toast(`${icon('shades')} SEXY MODE`, pick(SEXY_QUIPS));
+      for (let k = 0; k < 6; k++) emitHeart(px + rand(-0.6, 0.6), py + rand(1, 2), rand(-0.3, 0.3), 0.3);
+      break;
+    case 'phone': run.digits++; digits++; score += 250 * mult; Sound.play('phone'); toast(`${icon('phone')} ${pick(PHONE_QUIPS)}`, `+${250 * mult}`); break;
   }
+}
+
+// Height of the surface under Sam: a ramp's slope or a bus roof, else the path.
+// Surfaces only count when Sam is already near or above them, so running into
+// the front of a bus from the ground is still a crash, not a teleport onto the roof.
+function groundAt(x, y) {
+  let g = 0;
+  for (const o of obstacles) {
+    if (o.dead || o.fly || !(o.ramp || o.type === 'bus')) continue;
+    if (Math.abs(o.x - x) > o.w / 2 + 0.05 || Math.abs(o.z) > o.len / 2) continue;
+    let h;
+    if (o.ramp) {
+      h = clamp((RAMP_LEN / 2 + o.z) / RAMP_LEN, 0, 1) * ROOF_Y;
+      if (y < h - 1.3) continue;
+      if (!o.used && state === 'run') { o.used = true; run.ramps++; }
+    } else {
+      h = ROOF_Y;
+      if (y < h - 0.7) continue;
+    }
+    g = Math.max(g, h);
+  }
+  return g;
 }
 
 // ---------- update ----------
@@ -800,6 +1255,11 @@ function update(dt) {
     distance += dz;
     runTime += dt;
     score += dz * (power.beer > 0 ? 2 : 1);
+    if (state === 'run') {
+      run.distance = distance;
+      run.sinceHit += dz;
+      run.clean = Math.max(run.clean, run.sinceHit);
+    }
   }
 
   // --- world scroll ---
@@ -840,13 +1300,17 @@ function update(dt) {
     px = damp(px, tx, 16, dt);
     vy -= GRAVITY * dt;
     py += vy * dt;
-    if (py <= 0) {
-      py = 0; vy = 0;
+    ground = groundAt(px, py);
+    if (py <= ground) {
+      py = ground; vy = 0;
       if (!grounded) {
         grounded = true;
         if (queuedSlide) { queuedSlide = false; startSlide(); }
       }
+    } else if (grounded && py > ground + 0.05) {
+      grounded = false; // ran off the back of a bus or stepped off a roof
     }
+    if (grounded && ground >= ROOF_Y - 0.01 && state === 'run') run.roof += dz;
     slideT = Math.max(0, slideT - dt);
     player.position.set(px, py, 0);
     player.rotation.x = 0;
@@ -859,6 +1323,7 @@ function update(dt) {
   if (injuredT > 0) { injuredT -= dt; if (injuredT <= 0 && state === 'run') toast('Walked it off'); }
   if (power.boost > 0) { power.boost = Math.max(0, power.boost - dt); if (power.boost === 0) Sound.boost(false); }
   if (power.beer > 0) { power.beer = Math.max(0, power.beer - dt); if (power.beer === 0) $('drunkfx').classList.remove('on'); }
+  if (power.shades > 0) power.shades = Math.max(0, power.shades - dt);
   samInner.visible = invulnT > 0 && invulnT < 10 && power.boost <= 0 && !shield ? Math.floor(invulnT * 12) % 2 === 0 : true;
 
   // --- animation choice ---
@@ -879,6 +1344,19 @@ function update(dt) {
   if (flame.visible) flame.scale.set(1, 1 + Math.random() * 0.6, 1);
   bubble.visible = shield;
   if (shield) bubble.scale.setScalar(1 + Math.sin(elapsed * 6) * 0.04);
+  const rizz = power.shades > 0 && state !== 'dying';
+  wornShades.visible = rizz;
+  aura.visible = rizz;
+  if (rizz) {
+    const pulse = Math.sin(elapsed * 5);
+    aura.scale.setScalar(1 + pulse * 0.06);
+    aura.material.opacity = 0.08 + (pulse + 1) * 0.03;
+    // warn before it runs out, like the other timers
+    if (power.shades < 1.5) aura.visible = Math.floor(elapsed * 8) % 2 === 0;
+    glint.material.opacity = Math.max(0, Math.sin(elapsed * 3.2)) ** 6;
+    if (Math.random() < dt * 5) emitHeart(px + rand(-0.5, 0.5), py + rand(1.2, 1.9), rand(-0.2, 0.3), rand(0.18, 0.3));
+  }
+  updateHearts(dt, dz);
 
   // --- obstacles ---
   const standingTop = slideT > 0 ? 0.8 : 1.75;
@@ -895,6 +1373,11 @@ function update(dt) {
     o.mesh.position.x = o.x;
     o.mesh.position.z = o.z;
     if (o.z - o.len / 2 > DESPAWN_Z || o.mesh.position.y < -20) { recycle(obstacles, i); continue; }
+    if (state === 'run' && !o.dead && !o.passed && o.z > o.len / 2 + 0.3) {
+      o.passed = true;
+      // the only way past a banner in your lane is under it
+      if ((o.type === 'banner' || o.type === 'bannerWide') && Math.abs(o.x - px) < o.w / 2 + 0.32) run.banners++;
+    }
     if (state === 'run' && !o.dead) {
       if (Math.abs(o.z) < o.len / 2 + 0.3 && Math.abs(o.x - px) < o.w / 2 + 0.32) {
         if (py + standingTop > o.bottom && py < o.top) hit(o);
@@ -908,6 +1391,15 @@ function update(dt) {
     p.z += dz;
     p.t += dt;
     const m = p.mesh;
+    if (!p.taken && power.shades > 0 && state === 'run' && p.type === 'gains' && p.z > -MAGNET_RANGE && p.z < 1.5) {
+      // they can't resist: swoop in toward Sam on a curve
+      p.rizzed = true;
+      const k = 1 - Math.exp(-9 * dt);
+      p.x += (px - p.x) * k;
+      p.y += (py + 0.9 - p.y) * k;
+      p.z += (0 - p.z) * k * 0.9;
+    }
+    m.position.x = p.x;
     m.position.z = p.z;
     if (p.taken) {
       m.position.y += dt * 6;
@@ -921,6 +1413,15 @@ function update(dt) {
     if (p.z > DESPAWN_Z) recycle(pickups, i, 'p_');
   }
 
+  // --- missions ---
+  if (state === 'run' && missionRun) {
+    for (const i of missionRun.update(run)) {
+      toast('MISSION COMPLETE', missionText(missions.list[i]));
+      Sound.play('phone', { rate: 1.4, vol: 0.6 });
+      if (missionRun.allDone) setTimeout(() => { if (state === 'run') toast('SET COMPLETE', `+${setReward(missions.set)} dumbbells when you finish`); }, 1800);
+    }
+  }
+
   // --- milestones ---
   if (state === 'run' && milestoneI < MILESTONES.length && distance >= MILESTONES[milestoneI][0]) {
     const [m, txt] = MILESTONES[milestoneI++];
@@ -931,7 +1432,7 @@ function update(dt) {
   if (state === 'dying') {
     dyingT += dt;
     player.rotation.x = damp(player.rotation.x, -1.5, 8, dt);
-    player.position.y = damp(player.position.y, 0.15, 8, dt);
+    player.position.y = damp(player.position.y, ground + 0.15, 8, dt);
     if (mixer) mixer.timeScale = Math.max(0, 1 - dyingT * 3);
     if (dyingT > 1.3) {
       state = 'over';
@@ -944,8 +1445,11 @@ function update(dt) {
   // --- camera ---
   const drunk = power.beer > 0 ? 1 : 0;
   const introF = state === 'intro' ? THREE.MathUtils.smoothstep(introT / 1.2, 0, 1) : 1;
-  const runCam = new THREE.Vector3(px * 0.75, 2.9 + py * 0.35, 5.6);
-  const runLook = new THREE.Vector3(px * 0.85, 1.25 + py * 0.3, -8);
+  // follow Sam up onto bus roofs smoothly, but only lightly track jumps
+  camGround = damp(camGround, ground, 4, dt);
+  const air = py - camGround;
+  const runCam = new THREE.Vector3(px * 0.75, 2.9 + camGround * 0.85 + air * 0.35, 5.6);
+  const runLook = new THREE.Vector3(px * 0.85, 1.25 + camGround * 0.8 + air * 0.3, -8);
   camera.position.lerpVectors(MENU_CAM, runCam, introF);
   camLook.lerpVectors(MENU_LOOK, runLook, introF);
   if (shake > 0) {
@@ -995,8 +1499,10 @@ resize();
 camera.position.copy(MENU_CAM);
 camera.lookAt(MENU_LOOK);
 requestAnimationFrame(frame);
+const restored = Account.restore(); // runs alongside the model download
 load().then(async () => {
   try { await document.fonts?.ready; } catch { /* fonts are cosmetic */ }
+  if (await restored) adoptServerMissions(Account.profile);
   arch.userData.setText(arch.userData.texts[archIdx++]);
   toMenu();
 }).catch((err) => {
@@ -1005,4 +1511,4 @@ load().then(async () => {
 });
 
 // debug handle for testing in the browser console (local dev only)
-if (['localhost', '127.0.0.1'].includes(location.hostname)) window.__samrun = { player, samInner, camera, scene, act, get state() { return state; }, get speed() { return speed; }, obstacles, pickups, setGod(v) { invulnT = v ? 1e9 : 0; }, give(type) { collect({ type }); }, step(n = 1) { for (let i = 0; i < n; i++) update(1 / 60); renderer.render(scene, camera); } };
+if (['localhost', '127.0.0.1'].includes(location.hostname)) window.__samrun = { player, samInner, camera, scene, act, get state() { return state; }, get speed() { return speed; }, obstacles, pickups, setGod(v) { invulnT = v ? 1e9 : 0; }, give(type) { collect({ type }); }, get run() { return run; }, get missions() { return missions; }, Account, get ground() { return ground; }, get py() { return py; }, ramp(cars = 1) { busWithRamp(lane, -20, cars); }, step(n = 1) { for (let i = 0; i < n; i++) update(1 / 60); renderer.render(scene, camera); } };

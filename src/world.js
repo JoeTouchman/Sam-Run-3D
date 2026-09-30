@@ -339,7 +339,40 @@ function buildBus() {
   return g;
 }
 
+// Ramp up onto a parked bus: a wedge, low end toward the player (+z), high end flush with the roof.
+export const ROOF_Y = 3.05;
+export const RAMP_LEN = 6;
+function buildRamp() {
+  const shape = new THREE.Shape();
+  shape.moveTo(-RAMP_LEN / 2, 0);
+  shape.lineTo(RAMP_LEN / 2, 0);
+  shape.lineTo(-RAMP_LEN / 2, ROOF_Y);
+  shape.closePath();
+  const w = 1.9;
+  const body = new THREE.ExtrudeGeometry(shape, { depth: w, bevelEnabled: false });
+  body.rotateY(-Math.PI / 2); // shape x -> world z, extrusion -> world x
+  body.translate(w / 2, 0, 0);
+  const parts = [paint(body, 0x5d6675)];
+  // yellow hazard bars lying on the slope
+  const slope = Math.atan2(ROOF_Y, RAMP_LEN);
+  for (let i = 0; i < 4; i++) {
+    const f = (i + 0.5) / 4;
+    const z = RAMP_LEN / 2 - f * RAMP_LEN;
+    const y = f * ROOF_Y + 0.03;
+    parts.push(part(new THREE.BoxGeometry(w + 0.02, 0.05, 0.35), 0xffc933, 0, y, z, slope));
+  }
+  // side rails
+  for (const sx of [-1, 1]) {
+    const len = Math.hypot(RAMP_LEN, ROOF_Y);
+    parts.push(part(new THREE.BoxGeometry(0.08, 0.14, len), 0x2b2b2b, sx * (w / 2), ROOF_Y / 2 + 0.07, 0, slope));
+  }
+  const m = merged(parts);
+  m.receiveShadow = true;
+  return m;
+}
+
 // Obstacle catalogue: hitbox is [bottom, top] vertically, w wide (x), len deep (z).
+// The bus's hit top sits below its roof so you can land on it (and run off a ramp onto it).
 export const OBSTACLES = {
   slug: { w: 1.0, len: 1.8, bottom: 0, top: 0.8, build: buildSlug },
   turkey: { w: 1.0, len: 1.1, bottom: 0, top: 1.0, build: buildTurkey },
@@ -347,7 +380,8 @@ export const OBSTACLES = {
   logWide: { w: PATH_W - 0.8, len: 0.9, bottom: 0, top: 0.85, wide: true, build: () => buildLog(PATH_W - 0.8) },
   banner: { w: 2.0, len: 0.3, bottom: 1.35, top: 2.8, build: () => buildBanner(2.0) },
   bannerWide: { w: PATH_W - 0.4, len: 0.3, bottom: 1.35, top: 2.8, wide: true, build: () => buildBanner(PATH_W - 0.4) },
-  bus: { w: 2.0, len: 10, bottom: 0, top: 3.0, build: buildBus },
+  bus: { w: 2.0, len: 10, bottom: 0, top: 2.4, build: buildBus },
+  ramp: { w: 2.0, len: RAMP_LEN, bottom: 0, top: 0, ramp: true, build: buildRamp },
 };
 
 // ---------- pickups ----------
@@ -438,10 +472,77 @@ function buildPhone() {
   return g;
 }
 
+// Sexy Mode shades: chunky blue fashion sunglasses. Built at real-life size (about 15cm across) so the
+// same model can sit on Sam's face; the pickup is a scaled-up copy.
+const shadeFrameMat = new THREE.MeshStandardMaterial({ color: 0x1f5bff, metalness: 0.55, roughness: 0.25, emissive: 0x06155a });
+const shadeLensMat = new THREE.MeshStandardMaterial({ color: 0x38b6ff, metalness: 0.9, roughness: 0.08, emissive: 0x0a3a8a, transparent: true, opacity: 0.9 });
+export function buildShadesModel() {
+  const g = new THREE.Group();
+  const lens = new THREE.CircleGeometry(0.03, 20);
+  lens.scale(1.18, 0.9, 1);
+  const rim = new THREE.TorusGeometry(0.03, 0.0055, 6, 24);
+  rim.scale(1.18, 0.9, 1);
+  for (const s of [-1, 1]) {
+    const l = new THREE.Mesh(lens, shadeLensMat);
+    l.position.set(s * 0.038, 0, 0.001);
+    const r = new THREE.Mesh(rim, shadeFrameMat);
+    r.position.set(s * 0.038, 0, 0);
+    // temple arm running back over the ear
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.008, 0.11), shadeFrameMat);
+    arm.position.set(s * 0.074, 0.008, -0.055);
+    g.add(l, r, arm);
+  }
+  // chunky brow bar + bridge
+  const brow = new THREE.Mesh(new THREE.BoxGeometry(0.155, 0.01, 0.01), shadeFrameMat);
+  brow.position.set(0, 0.026, 0);
+  const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.006, 0.006), shadeFrameMat);
+  bridge.position.set(0, 0.012, 0);
+  g.add(brow, bridge);
+  return g;
+}
+
+function buildShades() {
+  const g = new THREE.Group();
+  const model = buildShadesModel();
+  model.scale.setScalar(4.2);
+  const sparkle = new THREE.Sprite(new THREE.SpriteMaterial({ map: sparkleTex(), color: 0xffffff, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  sparkle.scale.setScalar(0.35);
+  sparkle.position.set(0.18, 0.08, 0.06);
+  g.add(model, sparkle, glowRing(0x7a8cff));
+  g.userData.sparkle = sparkle;
+  return g;
+}
+
+let _sparkleTex, _heartTex;
+export function sparkleTex() {
+  return (_sparkleTex ||= canvasTex(64, 64, (c, w, h) => {
+    const gr = c.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+    gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.25, 'rgba(200,230,255,.6)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = gr; c.fillRect(0, 0, w, h);
+    c.fillStyle = '#fff';
+    c.beginPath(); c.moveTo(w / 2, 2); c.lineTo(w / 2 + 4, h / 2); c.lineTo(w / 2, h - 2); c.lineTo(w / 2 - 4, h / 2); c.fill();
+    c.beginPath(); c.moveTo(2, h / 2); c.lineTo(w / 2, h / 2 - 4); c.lineTo(w - 2, h / 2); c.lineTo(w / 2, h / 2 + 4); c.fill();
+  }));
+}
+export function heartTex() {
+  return (_heartTex ||= canvasTex(64, 64, (c, w) => {
+    c.fillStyle = '#ff5c8a';
+    c.strokeStyle = '#ffffff';
+    c.lineWidth = 4;
+    c.beginPath();
+    c.moveTo(w / 2, 54);
+    c.bezierCurveTo(4, 30, 10, 6, w / 2, 20);
+    c.bezierCurveTo(54, 6, 60, 30, w / 2, 54);
+    c.closePath();
+    c.fill(); c.stroke();
+  }));
+}
+
 export const PICKUPS = {
   gains: { build: buildDumbbell, y: 0.9 },
   beer: { build: buildCup, y: 1.0 },
   boost: { build: buildBoost, y: 1.0 },
   shake: { build: buildShake, y: 1.0 },
   phone: { build: buildPhone, y: 1.1 },
+  shades: { build: buildShades, y: 1.05 },
 };

@@ -1,6 +1,6 @@
 // All-time arcade leaderboard backed by Supabase (table public.samrun_scores).
 // The anon key is public by design: the table is read-only to it, and scores can
-// only be written through the samrun_submit_score function, which sanity-checks runs.
+// only be written through the samrun_* functions (see supabase/), which sanity-check runs.
 const URL = 'https://wzlmvozcvwvxnrlsafwz.supabase.co/rest/v1';
 const KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6bG12b3pjdnd2eG5ybHNhZnd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAzMDQwMzUsImV4cCI6MjA2NTg4MDAzNX0.3tm8n4RlsNi3PdrFxw_rWpiOd6-P7grWb_dxppancg8';
 const HEADERS = { apikey: KEY, Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json' };
@@ -18,22 +18,11 @@ export async function fetchTop(limit = 100) {
   return res.json();
 }
 
-// Returns { rank, best, improved }.
-export async function submitScore({ name, score, distance, gains, digits, smashes, duration }) {
-  const res = await fetch(`${URL}/rpc/samrun_submit_score`, {
-    method: 'POST',
-    headers: HEADERS,
-    body: JSON.stringify({
-      p_name: name,
-      p_score: Math.floor(score),
-      p_distance: Math.floor(distance),
-      p_gains: gains,
-      p_digits: digits,
-      p_smashes: smashes,
-      p_duration: Math.max(0.1, duration),
-    }),
-  });
+// Call one of the samrun_* Postgres functions. Errors carry the function's message
+// ("name taken", "invalid run", ...).
+export async function rpc(fn, args) {
+  const res = await fetch(`${URL}/rpc/${fn}`, { method: 'POST', headers: HEADERS, body: JSON.stringify(args) });
   const body = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(body?.message || `submit ${res.status}`);
-  return Array.isArray(body) ? body[0] : body;
+  if (!res.ok) throw new Error(body?.message || `${fn} ${res.status}`);
+  return body;
 }

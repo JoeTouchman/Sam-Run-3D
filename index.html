@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <title>Sam Run 3D</title>
-  <meta name="description" content="Sam Run 3D — the endless runner nobody asked for. Dodge banana slugs, the Loop bus and 8AM midterms across UCSC." />
+  <meta name="description" content="Sam Run 3D — the endless runner nobody asked for. Dodge banana slugs, ride the Loop bus roofs, and unlock new Sams across UCSC." />
   <meta name="theme-color" content="#f49a7a" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -71,6 +71,20 @@
         <path d="M3 18L2 7l5.5 4.5L12 4l4.5 7.5L22 7l-1 11z" fill="#ffc933"/>
         <rect x="3" y="18" width="18" height="3" rx="1" fill="#e0a400"/></g>
         <circle cx="12" cy="14" r="1.4" fill="#ff5c8a"/></symbol>
+      <symbol id="i-shades" viewBox="0 0 24 24"><g stroke="#1b1030" stroke-width="1.5" stroke-linejoin="round">
+        <path d="M1.5 8.5h21" stroke="#1f5bff" stroke-width="2.2"/>
+        <path d="M2.2 8.5h8.6l-.8 5.2a3.2 3.2 0 0 1-3.2 2.8h-.8a3.2 3.2 0 0 1-3.1-2.6z" fill="#38b6ff"/>
+        <path d="M13.2 8.5h8.6l-.7 5.4a3.2 3.2 0 0 1-3.1 2.6h-.8a3.2 3.2 0 0 1-3.2-2.8z" fill="#38b6ff"/></g>
+        <path d="M4.5 10.2l2 0M15.5 10.2l2 0" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/>
+        <path d="M20.5 3.2l.5 1.3 1.3.5-1.3.5-.5 1.3-.5-1.3-1.3-.5 1.3-.5z" fill="#ff5c8a"/></symbol>
+      <symbol id="i-shirt" viewBox="0 0 24 24"><g stroke="#1b1030" stroke-width="1.6" stroke-linejoin="round">
+        <path d="M8.5 2.5L3 5.5l2 5 2.5-1V21.5h9V9.5l2.5 1 2-5-5.5-3a3.5 3.5 0 0 1-7 0z" fill="#ff7a1a"/></g>
+        <path d="M10 13h4" stroke="#fff3c4" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="i-target" viewBox="0 0 24 24"><g stroke="#1b1030" stroke-width="1.6">
+        <circle cx="12" cy="12" r="10" fill="#ff5c8a"/><circle cx="12" cy="12" r="6.3" fill="#fff4e6"/><circle cx="12" cy="12" r="2.8" fill="#ff5c8a"/></g></symbol>
+      <symbol id="i-user" viewBox="0 0 24 24"><g stroke="#1b1030" stroke-width="1.6" stroke-linejoin="round">
+        <circle cx="12" cy="8" r="4.5" fill="#ffc933"/><path d="M3.5 21.5a8.5 8.5 0 0 1 17 0z" fill="#ffc933"/></g></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#49c76b" stroke="#1b1030" stroke-width="1.6"/><path d="M7 12.5l3.2 3.2L17 9" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
       <symbol id="i-sound" viewBox="0 0 24 24"><path d="M3 9h4l5-4.5v15L7 15H3z" fill="currentColor"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
       <symbol id="i-mute" viewBox="0 0 24 24"><path d="M3 9h4l5-4.5v15L7 15H3z" fill="currentColor"/><path d="M16 9l6 6M22 9l-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
       <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1.2" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1.2" fill="currentColor"/></symbol>
@@ -107,14 +121,23 @@
 
   <!-- Menu -->
   <div id="menu" class="screen hidden">
+    <div class="corner">
+      <div class="chip wallet"><svg class="ico"><use href="#i-dumbbell"/></svg><span class="walletAmt">0</span></div>
+      <button id="accountBtn" class="chip acct-chip"><svg class="ico"><use href="#i-user"/></svg><span id="accountLabel">SIGN IN</span></button>
+    </div>
     <div class="top">
       <div class="title">SAM RUN <span>3D</span></div>
       <div class="sub">Cowell College · UC Santa Cruz</div>
     </div>
     <div class="bottom">
       <div id="bestLine" class="best"></div>
+      <div id="dailyLine" class="daily hidden"></div>
       <button id="playBtn" class="btn primary">TAP TO RUN</button>
-      <button id="menuBoardBtn" class="btn board-btn"><svg class="ico"><use href="#i-trophy"/></svg> LEADERBOARD</button>
+      <div class="menu-row">
+        <button id="shopBtn" class="btn board-btn"><svg class="ico"><use href="#i-shirt"/></svg> SKINS</button>
+        <button id="missionsBtn" class="btn board-btn"><svg class="ico"><use href="#i-target"/></svg> MISSIONS<i id="missionsDot" class="dot hidden"></i></button>
+        <button id="menuBoardBtn" class="btn board-btn"><svg class="ico"><use href="#i-trophy"/></svg> BOARD</button>
+      </div>
       <div class="credit">
         <svg class="crown"><use href="#i-crown"/></svg>
         <div class="credit-line">Made by the coolest roommate Joe</div>
@@ -128,6 +151,7 @@
     <div class="panel">
       <div class="title small">PAUSED</div>
       <div class="sub">Sam is checking his Tinder.</div>
+      <div id="pauseMissions" class="mlist compact"></div>
       <div class="sound"><button class="icon-btn snd-btn" aria-label="Mute"><svg class="ico"><use href="#i-sound"/></svg></button><input class="snd-vol" type="range" min="0" max="100" step="1" aria-label="Volume" /></div>
       <button id="resumeBtn" class="btn primary">RESUME</button>
       <button id="quitBtn" class="btn">MAIN MENU</button>
@@ -147,10 +171,16 @@
       </div>
       <div id="newBest" class="newbest hidden"><svg class="ico"><use href="#i-trophy"/></svg> NEW PERSONAL RECORD</div>
       <div id="oBest" class="best"></div>
-      <form id="nameForm" class="name-row" autocomplete="off">
-        <input id="nameInput" maxlength="12" placeholder="YOUR NAME" autocapitalize="characters" autocorrect="off" spellcheck="false" enterkeyhint="send" aria-label="Your name for the leaderboard" />
-        <button id="postBtn" class="btn post" type="submit">POST</button>
-      </form>
+      <div id="bankBox" class="bank hidden">
+        <div id="bankLine" class="bank-line"></div>
+        <div id="bankExtra" class="bank-extra"></div>
+      </div>
+      <div id="saveCard" class="save-card hidden">
+        <div class="save-title">SAVE THIS RUN</div>
+        <div id="saveText" class="save-text"></div>
+        <button id="saveCreateBtn" class="btn post">CREATE ACCOUNT</button>
+        <button id="saveSignInBtn" class="linkish">I already have an account</button>
+      </div>
       <div id="submitMsg" class="submit-msg"></div>
       <button id="againBtn" class="btn primary">RUN IT BACK</button>
       <div class="row">
@@ -161,6 +191,67 @@
     </div>
   </div>
 
+
+  <!-- Missions -->
+  <div id="missions" class="screen dim hidden">
+    <div class="panel">
+      <div class="title small">MISSIONS</div>
+      <div id="missionSet" class="sub"></div>
+      <div id="missionList" class="mlist"></div>
+      <div id="missionReward" class="best"></div>
+      <div id="missionDaily" class="daily"></div>
+      <button id="missionsBack" class="btn primary">BACK</button>
+    </div>
+  </div>
+
+  <!-- Account -->
+  <div id="account" class="screen dim hidden">
+    <div class="panel">
+      <div class="title small" id="accountTitle">ACCOUNT</div>
+      <div id="accountGuest" class="acct-body">
+        <div class="tabs">
+          <button id="tabCreate" class="tab on" type="button">CREATE</button>
+          <button id="tabSignIn" class="tab" type="button">SIGN IN</button>
+        </div>
+        <form id="accountForm" class="acct-form" autocomplete="off">
+          <input id="acctName" class="field" maxlength="12" placeholder="NAME" autocapitalize="characters" autocorrect="off" spellcheck="false" aria-label="Name" />
+          <input id="acctPass" class="field" type="password" maxlength="72" placeholder="PASSWORD" autocomplete="current-password" aria-label="Password" />
+          <div id="acctHint" class="acct-hint"></div>
+          <button id="acctSubmit" class="btn primary" type="submit">CREATE ACCOUNT</button>
+        </form>
+        <div id="acctMsg" class="submit-msg"></div>
+      </div>
+      <div id="accountUser" class="acct-body hidden">
+        <div id="acctWho" class="sub"></div>
+        <div class="chip wallet big-chip"><svg class="ico"><use href="#i-dumbbell"/></svg><span class="walletAmt">0</span></div>
+        <button id="signOutBtn" class="btn">SIGN OUT</button>
+      </div>
+      <button id="accountBack" class="btn">BACK</button>
+    </div>
+  </div>
+
+  <!-- Skins shop: the dancing Sam behind it is the preview -->
+  <div id="shop" class="screen hidden">
+    <div class="shop-top">
+      <div class="title small">SKINS</div>
+      <div class="chip wallet"><svg class="ico"><use href="#i-dumbbell"/></svg><span class="walletAmt">0</span></div>
+    </div>
+    <div id="shopSpin" class="spin hidden"></div>
+    <div class="shop-bottom">
+      <div class="shop-pick">
+        <button id="skinPrev" class="icon-btn arrow" aria-label="Previous skin">‹</button>
+        <div class="skin-info">
+          <div id="skinName" class="skin-name"></div>
+          <div id="skinTag" class="skin-tag"></div>
+        </div>
+        <button id="skinNext" class="icon-btn arrow" aria-label="Next skin">›</button>
+      </div>
+      <div id="skinDots" class="skin-dots"></div>
+      <button id="skinAction" class="btn primary"></button>
+      <div id="shopMsg" class="submit-msg"></div>
+      <button id="shopBack" class="btn">BACK</button>
+    </div>
+  </div>
 
   <!-- Leaderboard -->
   <div id="board" class="screen dim hidden">

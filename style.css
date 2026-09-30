@@ -52,7 +52,7 @@ html, body {
 #loadText { font-weight: 900; font-size: 15px; opacity: .9; }
 
 #menu { justify-content: space-between; }
-#menu .top { margin-top: 3vh; }
+#menu .top { margin-top: calc(38px + 2vh); }
 #menu .bottom { display: flex; flex-direction: column; align-items: center; gap: 12px; width: 100%; max-width: 420px; position: relative; }
 
 .title {
@@ -215,17 +215,6 @@ html, body {
 .board-btn { font-size: 18px; padding: 10px 20px 7px; display: flex; align-items: center; gap: 8px; }
 .board-btn .ico { width: 22px; height: 22px; }
 
-.name-row { display: flex; gap: 8px; width: 100%; }
-#nameInput {
-  flex: 1; min-width: 0;
-  font-family: 'Luckiest Guy', sans-serif; font-size: 20px; letter-spacing: 2px; text-transform: uppercase;
-  padding: 10px 12px 7px; border-radius: 14px; border: 3px solid var(--ink);
-  background: var(--cream); color: var(--ink); outline: none;
-  user-select: text; -webkit-user-select: text; touch-action: manipulation;
-}
-#nameInput::placeholder { color: rgba(27,16,48,.35); }
-#nameInput:focus { border-color: var(--orange); }
-#nameInput:disabled { opacity: .6; }
 .panel .btn.post { width: auto; flex: none; min-width: 0; padding: 10px 16px 7px; font-size: 20px; background: linear-gradient(180deg, var(--gold), var(--orange)); }
 .btn:disabled { opacity: .6; transform: none; box-shadow: 0 5px 0 var(--ink); }
 .submit-msg { font-weight: 900; font-size: 15px; min-height: 1.2em; color: var(--gold); }
@@ -254,3 +243,90 @@ html, body {
 .board-list .sc { font-family: 'Luckiest Guy', sans-serif; font-size: 19px; text-align: right; padding-top: 3px; }
 .board-list .sc small { display: block; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 11px; opacity: .7; margin-top: -2px; }
 .board-list .note { display: block; text-align: center; background: none; font-weight: 800; opacity: .8; padding: 24px 8px; }
+
+/* ---------- menu corner: wallet + account ---------- */
+.corner {
+  position: absolute; top: calc(10px + var(--safe-top)); right: 12px;
+  display: flex; gap: 6px; align-items: center; z-index: 2;
+}
+.acct-chip { border: 2px solid rgba(255,255,255,.55); color: var(--cream); cursor: pointer; touch-action: manipulation; max-width: 46vw; }
+.acct-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wallet { color: var(--gold); }
+.big-chip { font-size: 26px; height: 46px; padding: 8px 16px 6px; }
+.big-chip .ico { width: 28px; height: 28px; }
+
+.menu-row { display: flex; gap: 8px; width: 100%; max-width: 380px; }
+.menu-row .btn { flex: 1; min-width: 0; font-size: 15px; padding: 10px 6px 7px; justify-content: center; gap: 5px; position: relative; }
+.menu-row .btn .ico { width: 18px; height: 18px; }
+.dot { position: absolute; top: -5px; right: -5px; width: 14px; height: 14px; border-radius: 50%; background: var(--pink); border: 2px solid var(--ink); }
+.daily { font-weight: 900; font-size: 14px; color: var(--gold); text-shadow: 0 2px 4px rgba(0,0,0,.45); }
+
+/* ---------- missions ---------- */
+.mlist { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.mission { display: grid; grid-template-columns: 26px 1fr; gap: 10px; align-items: center; text-align: left; background: rgba(255,255,255,.08); border-radius: 12px; padding: 9px 12px 9px 9px; }
+.mission .ico { width: 26px; height: 26px; }
+.mission .mt { font-weight: 900; font-size: 14px; line-height: 1.2; }
+.mission .bar2 { height: 7px; border-radius: 99px; background: rgba(255,255,255,.2); overflow: hidden; margin-top: 6px; }
+.mission .bar2 i { display: block; height: 100%; background: linear-gradient(90deg, var(--gold), var(--orange)); }
+.mission .mp { font-size: 11px; font-weight: 800; opacity: .75; margin-top: 3px; }
+.mission.done { background: rgba(73,199,107,.2); }
+.mission .num { width: 26px; height: 26px; border-radius: 50%; background: rgba(255,255,255,.14); display: flex; align-items: center; justify-content: center; font-family: 'Luckiest Guy', sans-serif; padding-top: 2px; }
+.mlist.compact .mission { padding: 6px 10px 6px 7px; }
+.mlist.compact .mt { font-size: 12px; }
+
+/* ---------- game over: banked / save card ---------- */
+.bank { width: 100%; background: rgba(255,201,51,.14); border: 2px solid rgba(255,201,51,.5); border-radius: 14px; padding: 8px 10px; }
+.bank-line { font-family: 'Luckiest Guy', sans-serif; font-size: 20px; color: var(--gold); display: flex; align-items: center; justify-content: center; gap: 6px; padding-top: 2px; }
+.bank-line .ico { width: 24px; height: 24px; }
+.bank-extra { font-weight: 800; font-size: 13px; opacity: .85; }
+.save-card {
+  width: 100%; display: flex; flex-direction: column; align-items: center; gap: 8px;
+  background: linear-gradient(180deg, rgba(255,92,138,.28), rgba(255,122,26,.2));
+  border: 2px dashed rgba(255,201,51,.8); border-radius: 16px; padding: 12px;
+}
+.save-title { font-family: 'Luckiest Guy', sans-serif; font-size: 22px; color: var(--gold); letter-spacing: 1px; }
+.save-text { font-weight: 800; font-size: 14px; line-height: 1.35; }
+.save-text b { color: var(--gold); }
+.panel .save-card .btn.post { width: 100%; }
+.linkish { background: none; border: 0; color: var(--cream); font-weight: 900; font-size: 14px; text-decoration: underline; cursor: pointer; padding: 2px; font-family: inherit; }
+
+/* ---------- account ---------- */
+.acct-body { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.tabs { display: flex; width: 100%; background: rgba(255,255,255,.08); border-radius: 14px; padding: 4px; }
+.tab { flex: 1; border: 0; border-radius: 10px; padding: 10px 6px 7px; background: none; color: var(--cream); font-family: 'Luckiest Guy', sans-serif; font-size: 17px; letter-spacing: 1px; cursor: pointer; }
+.tab.on { background: var(--cream); color: var(--ink); }
+.acct-form { width: 100%; display: flex; flex-direction: column; gap: 10px; }
+.field {
+  width: 100%; font-family: 'Luckiest Guy', sans-serif; font-size: 20px; letter-spacing: 2px;
+  padding: 10px 12px 7px; border-radius: 14px; border: 3px solid var(--ink);
+  background: var(--cream); color: var(--ink); outline: none;
+  user-select: text; -webkit-user-select: text; touch-action: manipulation;
+}
+#acctName { text-transform: uppercase; }
+.field::placeholder { color: rgba(27,16,48,.35); }
+.field:focus { border-color: var(--orange); }
+.acct-hint { font-weight: 800; font-size: 13px; min-height: 1.2em; color: var(--gold); line-height: 1.3; }
+.acct-hint.err { color: #ff9a9a; }
+.panel .acct-form .btn.primary { max-width: none; font-size: 24px; }
+
+/* ---------- shop ---------- */
+#shop { justify-content: space-between; }
+.shop-top { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 2vh; }
+.shop-bottom {
+  width: 100%; max-width: 380px; display: flex; flex-direction: column; align-items: center; gap: 10px;
+  background: var(--panel); border-radius: 22px; padding: 14px; border: 3px solid rgba(255,255,255,.18);
+}
+.shop-bottom .btn { width: 100%; max-width: none; }
+.shop-pick { display: flex; align-items: center; gap: 10px; width: 100%; }
+.arrow { font-size: 30px; line-height: 1; padding-bottom: 4px; flex: none; }
+.skin-info { flex: 1; min-width: 0; }
+.skin-name { font-family: 'Luckiest Guy', sans-serif; font-size: 28px; color: var(--gold); letter-spacing: 1px; padding-top: 3px; }
+.skin-tag { font-weight: 800; font-size: 13px; opacity: .85; }
+.skin-dots { display: flex; gap: 6px; }
+.skin-dots i { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,.3); }
+.skin-dots i.on { background: var(--gold); }
+.skin-dots i.own { box-shadow: 0 0 0 2px rgba(73,199,107,.9); }
+#skinAction { font-size: 21px; }
+#skinAction .ico { width: 22px; height: 22px; }
+.spin { position: fixed; left: 50%; top: 45%; width: 48px; height: 48px; margin: -24px; border-radius: 50%; border: 5px solid rgba(255,255,255,.3); border-top-color: var(--gold); animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
