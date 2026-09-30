@@ -829,7 +829,8 @@ function act(a) {
       vy = v; grounded = false; slideT = 0; queuedSlide = false;
       run.jumps++;
       Sound.play('jump', { rate: power.scooter > 0 ? 1.25 : 1 });
-      playOnce('jump', actions.jump ? actions.jump.getClip().duration / (2 * v / GRAVITY) : 1);
+      // on the scooter Sam just rides it up: keep the riding pose instead of the jump clip
+      if (power.scooter <= 0) playOnce('jump', actions.jump ? actions.jump.getClip().duration / (2 * v / GRAVITY) : 1);
     }
   } else if (a === 'down') {
     if (!grounded) { vy = -24; queuedSlide = true; }
@@ -1803,4 +1804,4 @@ load().then(async () => {
 });
 
 // debug handle for testing in the browser console (local dev only)
-if (['localhost', '127.0.0.1'].includes(location.hostname)) window.__samrun = { player, samInner, camera, scene, act, get state() { return state; }, get speed() { return speed; }, obstacles, pickups, setGod(v) { invulnT = v ? 1e9 : 0; }, give(type) { collect({ type }); }, get run() { return run; }, get missions() { return missions; }, Account, get ground() { return ground; }, get section() { return section; }, forceSection(t) { section = { type: t, left: 300, fresh: true, lead: 5 }; lastSpecial = t; }, get power() { return power; }, spawn(type, l, z, vz = 0) { return type === 'mosquito' ? spawnMosquito(z, vz ? 'weave' : 'bob', l) : spawnObstacle(type, LANES[l], z, vz); }, get shield() { return shield; }, set shield(v) { shield = v; }, speedFor, get lane() { return lane; }, get py() { return py; }, ramp(cars = 1) { busWithRamp(lane, -20, cars); }, step(n = 1) { for (let i = 0; i < n; i++) update(1 / 60); renderer.render(scene, camera); } };
+if (['localhost', '127.0.0.1'].includes(location.hostname)) window.__samrun = { player, samInner, camera, scene, act, get state() { return state; }, get speed() { return speed; }, obstacles, pickups, setGod(v) { invulnT = v ? 1e9 : 0; }, give(type) { collect({ type }); }, get run() { return run; }, get missions() { return missions; }, Account, get ground() { return ground; }, get section() { return section; }, forceSection(t) { section = { type: t, left: 300, fresh: true, lead: 5 }; lastSpecial = t; }, get power() { return power; }, get anim() { return currentAnim; }, spawn(type, l, z, vz = 0) { return type === 'mosquito' ? spawnMosquito(z, vz ? 'weave' : 'bob', l) : spawnObstacle(type, LANES[l], z, vz); }, get shield() { return shield; }, set shield(v) { shield = v; }, speedFor, get lane() { return lane; }, get py() { return py; }, ramp(cars = 1) { busWithRamp(lane, -20, cars); }, step(n = 1) { for (let i = 0; i < n; i++) update(1 / 60); renderer.render(scene, camera); } };
