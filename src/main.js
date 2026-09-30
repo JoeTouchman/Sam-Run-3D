@@ -490,7 +490,8 @@ function busWithRamp(laneI, zFront, cars = 1) {
   return RAMP_LEN + roofLen;
 }
 
-function spawnRow(z) {
+// The normal mix: what the road looks like between themed sections. Returns the gap to the next row.
+function mixedRow(z) {
   const lanes = [0, 1, 2].sort(() => Math.random() - 0.5);
   const small = ['slug', 'turkey', 'log', 'banner'];
   const d = distance;
@@ -544,13 +545,148 @@ function spawnRow(z) {
   }
 
   rowsSinceBus = bus ? 0 : rowsSinceBus + 1;
-  sinceRow -= extra; // leave room so the next row doesn't land on top of a long bus train
 
   if (free.length) {
     const fl = pick(free);
     if (d > 60 && Math.random() < 0.09) spawnPower(fl, z - 6);
     else if (Math.random() < 0.75) coinLine(fl, z + 4, 5 + Math.floor(Math.random() * 4));
   }
+  // extra leaves room so the next row doesn't land on top of a long bus train
+  return clamp(26 - distance * 0.004, 17, 26) + rand(-2, 4) + extra;
+}
+
+// ---------- sections ----------
+// Like Subway Surfers' stretches of train roofs: the road alternates between the normal mix
+// and a themed section. Each section's name pops up (and goes on the campus arch when it's
+// free) as Sam reaches it. Every section keeps at least one way through.
+const SECTIONS = {
+  mixed: { row: mixedRow },
+  rush: { name: 'GAINS ROAD', sub: 'No traffic. Just gains.', len: [160, 220], minD: 250, row: rushRow },
+  swarm: { name: 'SLUG STAMPEDE', sub: 'Jump, jump, jump', len: [220, 320], minD: 350, row: swarmRow },
+  limbo: { name: 'BANNER ALLEY', sub: 'Duck. Jump. Repeat.', len: [220, 320], minD: 350, row: limboRow },
+  busyard: { name: 'BUS YARD', sub: 'The floor is lava', len: [280, 400], minD: 500, row: busyardRow },
+  // oncoming buses close in fast, so leave a long empty lead-in: nothing parked from the
+  // previous section can end up level with them
+  traffic: { name: 'RUSH HOUR', sub: 'Loop buses incoming', len: [260, 360], minD: 1000, lead: 70, row: trafficRow },
+};
+let section = null;
+let lastSpecial = null;
+const sectionMarks = [];
+
+function startSection() {
+  if (section && section.type !== 'mixed') { section = { type: 'mixed', left: rand(250, 450) }; return; }
+  const ahead = distance + -SPAWN_Z;
+  const pool = Object.keys(SECTIONS).filter((k) => SECTIONS[k].name && k !== lastSpecial && ahead >= SECTIONS[k].minD);
+  if (!pool.length) { section = { type: 'mixed', left: 150 }; return; }
+  const type = pick(pool);
+  const def = SECTIONS[type];
+  lastSpecial = type;
+  section = { type, left: rand(...def.len), fresh: true, lead: def.lead || 12 };
+}
+
+function spawnRow(z) {
+  if (!section || section.left <= 0) startSection();
+  const def = SECTIONS[section.type];
+  if (section.lead > 0) { const g = section.lead; section.lead = 0; return g; }
+  if (section.fresh) {
+    section.fresh = false;
+    sectionMarks.push({ z, def });
+    // put the section's name on the campus arch if it's free (behind the camera)
+    if (arch.position.z > DESPAWN_Z) {
+      arch.position.z = z + 4;
+      arch.userData.setText(def.name);
+      sinceArch = 0;
+    }
+  }
+  const gap = def.row(z);
+  section.left -= gap;
+  return gap;
+}
+
+// GAINS ROAD: dumbbell snakes weaving across lanes, a power-up to start, no obstacles
+function rushRow(z) {
+  if (section.lane === undefined) {
+    section.lane = 1;
+    spawnPickup(pick(['shades', 'boost', 'beer']), LANES[1], z + 6);
+  }
+  const from = section.lane;
+  const to = pick([0, 1, 2].filter((l) => l !== from));
+  const n = 9;
+  for (let k = 0; k < n; k++) {
+    const f = THREE.MathUtils.smoothstep(k / (n - 1), 0.15, 0.85);
+    spawnPickup('gains', LANES[from] + (LANES[to] - LANES[from]) * f, z - k * 2.4);
+  }
+  section.lane = to;
+  if (Math.random() < 0.4) coinArc(pick([0, 1, 2].filter((l) => l !== to)), z - 10);
+  return 22;
+}
+
+// SLUG STAMPEDE: tight rows of jumpable critters and logs; some rows fill every lane
+function swarmRow(z) {
+  const lanes = [0, 1, 2].sort(() => Math.random() - 0.5);
+  const jumpers = ['slug', 'turkey', 'log'];
+  const all = !section.lastAll && Math.random() < 0.35;
+  if (all) {
+    for (const l of lanes) spawnObstacle(pick(jumpers), LANES[l], z + rand(-0.4, 0.4));
+    coinArc(lanes[0], z);
+  } else {
+    spawnObstacle(pick(jumpers), LANES[lanes[0]], z);
+    spawnObstacle(pick(jumpers), LANES[lanes[1]], z + rand(-1, 1));
+    coinLine(lanes[2], z + 4, 5);
+  }
+  section.lastAll = all;
+  return rand(14, 17) + (all ? 5 : 0);
+}
+
+// BANNER ALLEY: alternating slide-under banners and jump-over logs
+function limboRow(z) {
+  const lanes = [0, 1, 2].sort(() => Math.random() - 0.5);
+  section.flip = !section.flip;
+  if (section.flip) {
+    if (Math.random() < 0.65) {
+      spawnObstacle('bannerWide', 0, z);
+      coinLine(lanes[0], z + 3, 4); // grab them while sliding
+    } else {
+      spawnObstacle('banner', LANES[lanes[0]], z);
+      spawnObstacle('banner', LANES[lanes[1]], z);
+      coinLine(lanes[2], z + 4, 5);
+    }
+  } else if (Math.random() < 0.65) {
+    spawnObstacle('logWide', 0, z);
+    coinArc(lanes[0], z);
+  } else {
+    spawnObstacle('log', LANES[lanes[0]], z);
+    spawnObstacle('banner', LANES[lanes[1]], z);
+    coinLine(lanes[2], z + 4, 5);
+  }
+  return rand(16, 20);
+}
+
+// BUS YARD: long bus trains side by side, every one with a ramp, so you can live on the roofs.
+// Fall into a gap and the next train's ramp takes you back up.
+function busyardRow(z) {
+  let trains = [0, 1, 2].filter(() => Math.random() < 0.8);
+  if (trains.length < 2) trains = [0, 1, 2].sort(() => Math.random() - 0.5).slice(0, 2);
+  let longest = 0;
+  for (const l of trains) {
+    const offset = rand(0, 6);
+    const len = busWithRamp(l, z - offset, 2 + Math.floor(Math.random() * 3)) + offset;
+    longest = Math.max(longest, len);
+  }
+  for (const l of [0, 1, 2]) if (!trains.includes(l)) coinLine(l, z - 4, 8);
+  if (Math.random() < 0.35) spawnPower(pick(trains), z - RAMP_LEN - 14, ROOF_Y + 1);
+  rowsSinceBus = 0;
+  return longest + rand(3, 7);
+}
+
+// RUSH HOUR: one oncoming Loop bus per row; the other lanes only ever hold jumpable stuff
+function trafficRow(z) {
+  const lanes = [0, 1, 2].sort(() => Math.random() - 0.5);
+  spawnObstacle('bus', LANES[lanes[0]], z - 5, 9);
+  if (Math.random() < 0.5) spawnObstacle(pick(['slug', 'turkey', 'log']), LANES[lanes[1]], z);
+  coinLine(lanes[2], z + 4, 6);
+  rowsSinceBus = 0;
+  return rand(28, 34);
 }
 
 function resetRun() {
@@ -572,7 +708,11 @@ function resetRun() {
   samInner.visible = true;
   if (mixer) mixer.timeScale = 1;
   // pre-populate the road ahead
-  for (let z = -45; z > SPAWN_Z; z -= 24) { sinceRow = 0; spawnRow(z); }
+  section = { type: 'mixed', left: rand(320, 420) };
+  lastSpecial = null;
+  sectionMarks.length = 0;
+  for (let z = -45; z > SPAWN_Z; z -= 24) mixedRow(z);
+  section.left -= -SPAWN_Z - 45;
   sinceRow = 0;
   arch.position.z = -120;
   lastHud = {};
@@ -1177,6 +1317,22 @@ function hit(o) {
   toast(pick(HIT_QUIPS), 'One more hit and you’re done');
 }
 
+// Supersonic ending: blast away everything around Sam so he doesn't drop out of it straight
+// into a bus (like the jetpack landing in Subway Surfers). The bus or ramp he's standing on stays.
+function clearTheWay() {
+  const onRoof = ground > 0;
+  for (const o of obstacles) {
+    if (o.dead || o.fly) continue;
+    if (o.z - o.len / 2 > 1.5 || o.z + o.len / 2 < -60) continue;
+    if (onRoof && (o.ramp || o.type === 'bus') && Math.abs(o.x - px) < o.w / 2 + 0.1) continue;
+    o.dead = true;
+    o.fly = { vy: rand(8, 12), vx: (o.x >= px ? 1 : -1) * rand(5, 9), spin: rand(-8, 8) };
+  }
+  invulnT = Math.max(invulnT, 0.8);
+  shake = 0.25;
+  Sound.play('hit', { vol: 0.5, rate: 0.8 });
+}
+
 function smash(o) {
   o.dead = true;
   smashes++;
@@ -1221,7 +1377,9 @@ function groundAt(x, y) {
   let g = 0;
   for (const o of obstacles) {
     if (o.dead || o.fly || !(o.ramp || o.type === 'bus')) continue;
-    if (Math.abs(o.x - x) > o.w / 2 + 0.05 || Math.abs(o.z) > o.len / 2) continue;
+    // bus roofs reach a touch past their ends so the small gap between train cars doesn't
+    // make Sam dip for a frame on his way across
+    if (Math.abs(o.x - x) > o.w / 2 + 0.05 || Math.abs(o.z) > o.len / 2 + (o.ramp ? 0 : 0.4)) continue;
     let h;
     if (o.ramp) {
       h = clamp((RAMP_LEN / 2 + o.z) / RAMP_LEN, 0, 1) * ROOF_Y;
@@ -1304,8 +1462,7 @@ function update(dt) {
     sinceRow += dz;
     if (sinceRow >= rowGap) {
       sinceRow -= rowGap;
-      spawnRow(SPAWN_Z + sinceRow);
-      rowGap = clamp(26 - distance * 0.004, 17, 26) + rand(-2, 4);
+      rowGap = spawnRow(SPAWN_Z + sinceRow);
     }
   }
 
@@ -1336,7 +1493,7 @@ function update(dt) {
   // --- timers ---
   invulnT = Math.max(0, invulnT - dt);
   if (injuredT > 0) { injuredT -= dt; if (injuredT <= 0 && state === 'run') toast('Walked it off'); }
-  if (power.boost > 0) { power.boost = Math.max(0, power.boost - dt); if (power.boost === 0) Sound.boost(false); }
+  if (power.boost > 0) { power.boost = Math.max(0, power.boost - dt); if (power.boost === 0) { Sound.boost(false); if (state === 'run') clearTheWay(); } }
   if (power.beer > 0) { power.beer = Math.max(0, power.beer - dt); if (power.beer === 0) $('drunkfx').classList.remove('on'); }
   if (power.shades > 0) power.shades = Math.max(0, power.shades - dt);
   samInner.visible = invulnT > 0 && invulnT < 10 && power.boost <= 0 && !shield ? Math.floor(invulnT * 12) % 2 === 0 : true;
@@ -1437,6 +1594,16 @@ function update(dt) {
     }
   }
 
+  // --- section names ---
+  for (let i = sectionMarks.length - 1; i >= 0; i--) {
+    const m = sectionMarks[i];
+    m.z += dz;
+    if (m.z > -4) {
+      sectionMarks.splice(i, 1);
+      if (state === 'run') toast(m.def.name, m.def.sub);
+    }
+  }
+
   // --- milestones ---
   if (state === 'run' && milestoneI < MILESTONES.length && distance >= MILESTONES[milestoneI][0]) {
     const [m, txt] = MILESTONES[milestoneI++];
@@ -1526,4 +1693,4 @@ load().then(async () => {
 });
 
 // debug handle for testing in the browser console (local dev only)
-if (['localhost', '127.0.0.1'].includes(location.hostname)) window.__samrun = { player, samInner, camera, scene, act, get state() { return state; }, get speed() { return speed; }, obstacles, pickups, setGod(v) { invulnT = v ? 1e9 : 0; }, give(type) { collect({ type }); }, get run() { return run; }, get missions() { return missions; }, Account, get ground() { return ground; }, get py() { return py; }, ramp(cars = 1) { busWithRamp(lane, -20, cars); }, step(n = 1) { for (let i = 0; i < n; i++) update(1 / 60); renderer.render(scene, camera); } };
+if (['localhost', '127.0.0.1'].includes(location.hostname)) window.__samrun = { player, samInner, camera, scene, act, get state() { return state; }, get speed() { return speed; }, obstacles, pickups, setGod(v) { invulnT = v ? 1e9 : 0; }, give(type) { collect({ type }); }, get run() { return run; }, get missions() { return missions; }, Account, get ground() { return ground; }, get section() { return section; }, forceSection(t) { section = { type: t, left: 300, fresh: true, lead: 5 }; lastSpecial = t; }, get power() { return power; }, get lane() { return lane; }, get py() { return py; }, ramp(cars = 1) { busWithRamp(lane, -20, cars); }, step(n = 1) { for (let i = 0; i < n; i++) update(1 / 60); renderer.render(scene, camera); } };

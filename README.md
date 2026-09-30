@@ -19,6 +19,8 @@ Plain static site: three.js from a CDN, no build step. Hosted on Vercel at sam.j
 
 A hit leaves Sam injured for a few seconds. A second hit while injured, or running into the front of a bus, ends the run.
 
+The road alternates between the normal mix and themed sections, each announced as you reach it: GAINS ROAD (no obstacles, dumbbell snakes), SLUG STAMPEDE (rows of critters to jump), BANNER ALLEY (slide, jump, repeat), BUS YARD (whole stretches of bus roofs) and RUSH HOUR (oncoming Loop buses, from 1,000m). When Supersonic runs out it blasts the road clear ahead so you never land in something.
+
 Parked buses often have a ramp: run up it and along the roofs (bus trains are 2-3 buses long). Step off the side or the back and you drop back down.
 
 ## Accounts, dumbbells, skins
