@@ -1,8 +1,11 @@
-// Music + sound effects, all routed through one Web Audio graph so a single
-// gain node controls volume (iOS ignores HTMLAudioElement.volume).
+// Music + sound effects, all routed through one Web Audio graph so gain nodes control
+// volume (iOS ignores HTMLAudioElement.volume).
 //
-//   sfx buffers ─► sfxGain ─┐
-//   <audio> music ─► musicGain ─┴► master ─► speakers
+//   sfx buffers ─► sfxGain (sfx volume) ────────────────────┐
+//   <audio> music ─► musicGain (fades) ─► musicLevel (music volume) ─┴► master (mute) ─► speakers
+//
+// The page's audio session is "ambient", so on iPhone the game mixes with Spotify etc.
+// instead of pausing it (and stays out of the lock screen's Now Playing controls).
 //
 // Everything is silenced (music paused, context suspended) whenever the page
 // is hidden, so nothing keeps playing after you leave the tab or lock the phone.
@@ -30,9 +33,12 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private mode */ } },
 };
 
+// Must be set before any audio starts. Safari 16.4+; elsewhere it's a no-op.
+try { if (navigator.audioSession) navigator.audioSession.type = 'ambient'; } catch { /* unsupported */ }
+
 const AC = window.AudioContext || window.webkitAudioContext;
 const ctx = AC ? new AC() : null;
-let master, sfxGain, musicGain;
+let master, sfxGain, musicGain, musicLevel;
 const buffers = {};
 const tracks = {};
 let unlocked = false;
@@ -52,15 +58,19 @@ if (channel) {
   };
 }
 
-let volume = store.get('samrun.sound.volume', 0.8);
+// separate music / sfx volumes; older saves had one shared volume
+const oldVolume = store.get('samrun.sound.volume', 0.8);
+let musicVolume = store.get('samrun.sound.music', oldVolume);
+let sfxVolume = store.get('samrun.sound.sfx', oldVolume);
 let muted = store.get('samrun.sound.muted', false);
 
 if (ctx) {
   master = ctx.createGain();
   sfxGain = ctx.createGain();
   musicGain = ctx.createGain();
+  musicLevel = ctx.createGain();
   sfxGain.connect(master);
-  musicGain.connect(master);
+  musicGain.connect(musicLevel).connect(master);
   master.connect(ctx.destination);
   applyVolume();
 
@@ -90,7 +100,9 @@ if (ctx) {
 
 function applyVolume() {
   if (!master) return;
-  master.gain.setTargetAtTime(muted ? 0 : volume, ctx.currentTime, 0.02);
+  master.gain.setTargetAtTime(muted ? 0 : 1, ctx.currentTime, 0.02);
+  musicLevel.gain.setTargetAtTime(musicVolume, ctx.currentTime, 0.02);
+  sfxGain.gain.setTargetAtTime(sfxVolume, ctx.currentTime, 0.02);
 }
 
 function audible() { return ctx && unlocked && !hidden && !yielded; }
@@ -100,6 +112,10 @@ function syncMusic() {
   for (const [name, el] of Object.entries(tracks)) {
     const shouldPlay = audible() && name === wantTrack;
     if (shouldPlay && el.paused) {
+      if (!el.getAttribute('src')) { // reattach after sleep() unloaded it
+        el.src = BASE + MUSIC[name].file;
+        el.currentTime = el.dataset.t ? Number(el.dataset.t) : 0;
+      }
       el.play().catch(() => {});
       channel?.postMessage({ type: 'music', tab: tabId });
     }
@@ -110,6 +126,15 @@ function syncMusic() {
 function sleep() {
   hidden = true;
   syncMusic();
+  // Unload the music so iOS drops its lock-screen / home-screen Now Playing controls
+  // (a paused <audio> keeps them around, and their play button can't do anything).
+  for (const el of Object.values(tracks)) {
+    if (!el.getAttribute('src')) continue;
+    el.dataset.t = el.currentTime || 0;
+    el.removeAttribute('src');
+    el.load();
+  }
+  if ('mediaSession' in navigator) { navigator.mediaSession.metadata = null; navigator.mediaSession.playbackState = 'none'; }
   stopBoost();
   if (ctx && ctx.state === 'running') ctx.suspend().catch(() => {});
 }
@@ -131,7 +156,8 @@ export const Sound = {
   get state() {
     return { ctx: ctx?.state, playing: Object.keys(tracks).filter((k) => !tracks[k].paused), want: wantTrack, unlocked, hidden };
   },
-  get volume() { return volume; },
+  get musicVolume() { return musicVolume; },
+  get sfxVolume() { return sfxVolume; },
   get muted() { return muted; },
 
   // Browsers only allow audio after a user gesture; call this from input handlers.
@@ -145,10 +171,13 @@ export const Sound = {
     }
   },
 
-  setVolume(v) {
-    volume = Math.max(0, Math.min(1, v));
-    if (volume > 0 && muted) muted = false;
-    store.set('samrun.sound.volume', volume);
+  // kind: 'music' | 'sfx'
+  setVolume(kind, v) {
+    v = Math.max(0, Math.min(1, v));
+    if (kind === 'music') musicVolume = v; else sfxVolume = v;
+    if (v > 0 && muted) muted = false;
+    store.set('samrun.sound.music', musicVolume);
+    store.set('samrun.sound.sfx', sfxVolume);
     store.set('samrun.sound.muted', muted);
     applyVolume();
   },
@@ -174,7 +203,7 @@ export const Sound = {
   // 'theme' | 'run' | null. restart=true rewinds the track.
   music(name, { restart = false } = {}) {
     if (!ctx) return;
-    if (restart && tracks[name]) tracks[name].currentTime = 0;
+    if (restart && tracks[name]) { tracks[name].currentTime = 0; tracks[name].dataset.t = 0; }
     if (name !== wantTrack && tracks[name] && !restart) {
       // switching tracks: fade the new one in
       musicGain.gain.cancelScheduledValues(ctx.currentTime);

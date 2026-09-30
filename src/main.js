@@ -698,19 +698,25 @@ $('pauseBtn').addEventListener('click', () => togglePause());
 $('resumeBtn').addEventListener('click', () => togglePause());
 // mute button + volume slider (menu and pause screen share state)
 function syncSoundUi() {
+  const vol = { music: Sound.musicVolume, sfx: Sound.sfxVolume };
   for (const el of document.querySelectorAll('.sound')) {
-    const off = Sound.muted || Sound.volume === 0;
+    const off = Sound.muted || (vol.music === 0 && vol.sfx === 0);
     el.classList.toggle('off', off);
     el.querySelector('use').setAttribute('href', off ? '#i-mute' : '#i-sound');
-    const r = el.querySelector('.snd-vol');
-    r.value = Math.round(Sound.volume * 100);
-    r.style.setProperty('--fill', `${off ? 0 : r.value}%`);
+    for (const r of el.querySelectorAll('.snd-vol')) {
+      r.value = Math.round(vol[r.dataset.kind] * 100);
+      r.style.setProperty('--fill', `${Sound.muted ? 0 : r.value}%`);
+    }
   }
 }
 for (const el of document.querySelectorAll('.sound')) {
   el.querySelector('.snd-btn').addEventListener('click', () => { Sound.unlock(); Sound.toggleMute(); syncSoundUi(); });
-  el.querySelector('.snd-vol').addEventListener('input', (e) => { Sound.unlock(); Sound.setVolume(e.target.value / 100); syncSoundUi(); });
+  for (const r of el.querySelectorAll('.snd-vol')) {
+    r.addEventListener('input', (e) => { Sound.unlock(); Sound.setVolume(r.dataset.kind, e.target.value / 100); syncSoundUi(); });
+  }
 }
+// let go of a slider: blur it so the arrow keys steer Sam again, and blip so you can hear the sfx level
+for (const r of document.querySelectorAll('.snd-vol')) r.addEventListener('change', () => { r.blur(); if (r.dataset.kind === 'sfx') Sound.play('gains'); });
 syncSoundUi();
 
 $('shareBtn').addEventListener('click', async () => {

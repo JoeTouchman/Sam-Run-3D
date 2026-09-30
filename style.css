@@ -196,9 +196,14 @@ html, body {
 .sound {
   display: flex; align-items: center; gap: 10px;
   background: rgba(27,16,48,.6); border-radius: 99px; padding: 4px 16px 4px 4px;
-  width: 100%; max-width: 260px;
+  width: 100%; max-width: 280px;
 }
-.sound .icon-btn { width: 38px; height: 38px; border-radius: 99px; flex: none; }
+.snd-rows { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.snd-row { display: flex; align-items: center; gap: 8px; }
+.snd-row .ico { width: 16px; height: 16px; opacity: .85; flex: none; }
+.sound .snd-vol { height: 22px; }
+.sound .icon-btn { width: 40px; height: 40px; border-radius: 99px; flex: none; }
+.sound { border-radius: 26px; padding: 5px 16px 5px 6px; }
 .snd-vol {
   -webkit-appearance: none; appearance: none; flex: 1; height: 28px; background: transparent; margin: 0; touch-action: none;
 }
