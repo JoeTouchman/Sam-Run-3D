@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { Sound } from './audio.js';
 import { fetchTop, cleanName, NAME_PATTERN } from './leaderboard.js';
 import { Account } from './account.js';
@@ -9,7 +10,7 @@ import {
 import {
   LANE_W, LANES, PATH_W, GROUND_LEN, CHUNK, ROOF_Y, RAMP_LEN,
   makePathTexture, makeGrassTexture, makeSky, buildChunk, buildArch, OBSTACLES, PICKUPS,
-  buildShadesModel, buildScooterModel, heartTex, sparkleTex,
+  buildShadesModel, buildScooterModel, heartTex, sparkleTex, DUMBBELL_MATS,
 } from './world.js';
 
 const $ = (id) => document.getElementById(id);
@@ -71,6 +72,10 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 const scene = new THREE.Scene();
+
+// A soft studio reflection so the chrome dumbbells actually shine (only they use it)
+const chromeEnv = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+for (const m of DUMBBELL_MATS) { m.envMap = chromeEnv; m.envMapIntensity = 1.1; m.needsUpdate = true; }
 const FOG = new THREE.Color(0xf5b98f);
 scene.background = FOG;
 scene.fog = new THREE.Fog(FOG, 50, 170);

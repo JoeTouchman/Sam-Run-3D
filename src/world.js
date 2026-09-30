@@ -438,10 +438,12 @@ export const OBSTACLES = {
 };
 
 // ---------- pickups ----------
-// Dumbbells: black gym plates with a bright chrome bar and a light glow, nothing like the
-// yellow banana slugs.
-const plateMat = new THREE.MeshStandardMaterial({ color: 0x2a2f3d, emissive: 0x1a2140, metalness: 0.3, roughness: 0.4 });
-const barMat = new THREE.MeshStandardMaterial({ color: 0xf2f5f8, emissive: 0x6a7480, metalness: 0.4, roughness: 0.2 });
+// Dumbbells: polished chrome, shiny like a coin (main.js gives these materials a reflection
+// map), and nothing like the yellow banana slugs.
+const plateMat = new THREE.MeshStandardMaterial({ color: 0xb9c3cf, emissive: 0x10151c, metalness: 1, roughness: 0.2 });
+const barMat = new THREE.MeshStandardMaterial({ color: 0xeef2f6, emissive: 0x1a2028, metalness: 1, roughness: 0.1 });
+export const DUMBBELL_MATS = [plateMat, barMat];
+
 let barGeo, plateGeo;
 function buildDumbbell() {
   barGeo ||= new THREE.CylinderGeometry(0.065, 0.065, 0.86, 8).rotateZ(Math.PI / 2);
