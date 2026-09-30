@@ -595,48 +595,37 @@ function mixedRow(z) {
 
 // ---------- sections ----------
 // Like Subway Surfers' stretches of train roofs: the road alternates between the normal mix
-// and a themed section. Each section's name pops up (and goes on the campus arch when it's
-// free) as Sam reaches it. Every section keeps at least one way through.
+// and a themed stretch with its own layout (no titles, you just notice the road change).
+// Every section keeps at least one way through.
 const SECTIONS = {
   mixed: { row: mixedRow },
-  rush: { name: 'GAINS ROAD', sub: 'No traffic. Just gains.', len: [160, 220], minD: 250, row: rushRow },
-  swarm: { name: 'SLUG STAMPEDE', sub: 'Jump, jump, jump', len: [220, 320], minD: 350, row: swarmRow },
-  limbo: { name: 'BANNER ALLEY', sub: 'Duck. Jump. Repeat.', len: [220, 320], minD: 350, row: limboRow },
-  busyard: { name: 'BUS YARD', sub: 'The floor is lava', len: [280, 400], minD: 500, row: busyardRow },
+  rush: { special: true, len: [160, 220], minD: 250, row: rushRow },
+  swarm: { special: true, len: [220, 320], minD: 350, row: swarmRow },
+  limbo: { special: true, len: [220, 320], minD: 350, row: limboRow },
+  busyard: { special: true, len: [280, 400], minD: 500, row: busyardRow },
   // oncoming buses close in fast, so leave a long empty lead-in: nothing parked from the
   // previous section can end up level with them
-  traffic: { name: 'RUSH HOUR', sub: 'Loop buses incoming', len: [260, 360], minD: 1000, lead: 70, row: trafficRow },
-  skeeter: { name: 'SKEETER SEASON', sub: 'Watch how they move', len: [240, 340], minD: 4000, row: skeeterRow },
+  traffic: { special: true, len: [260, 360], minD: 1000, lead: 70, row: trafficRow },
+  skeeter: { special: true, len: [240, 340], minD: 4000, row: skeeterRow },
 };
 let section = null;
 let lastSpecial = null;
-const sectionMarks = [];
 
 function startSection() {
   if (section && section.type !== 'mixed') { section = { type: 'mixed', left: rand(250, 450) }; return; }
   const ahead = distance + -SPAWN_Z;
-  const pool = Object.keys(SECTIONS).filter((k) => SECTIONS[k].name && k !== lastSpecial && ahead >= SECTIONS[k].minD);
+  const pool = Object.keys(SECTIONS).filter((k) => SECTIONS[k].special && k !== lastSpecial && ahead >= SECTIONS[k].minD);
   if (!pool.length) { section = { type: 'mixed', left: 150 }; return; }
   const type = pick(pool);
   const def = SECTIONS[type];
   lastSpecial = type;
-  section = { type, left: rand(...def.len), fresh: true, lead: def.lead || 12 };
+  section = { type, left: rand(...def.len), lead: def.lead || 12 };
 }
 
 function spawnRow(z) {
   if (!section || section.left <= 0) startSection();
   const def = SECTIONS[section.type];
   if (section.lead > 0) { const g = section.lead; section.lead = 0; return g; }
-  if (section.fresh) {
-    section.fresh = false;
-    sectionMarks.push({ z, def });
-    // put the section's name on the campus arch if it's free (behind the camera)
-    if (arch.position.z > DESPAWN_Z) {
-      arch.position.z = z + 4;
-      arch.userData.setText(def.name);
-      sinceArch = 0;
-    }
-  }
   // past the plateau Sam covers more ground per jump, so rows spread out a little with speed
   // (less than speed grows, so it still gets harder)
   const gap = def.row(z) * Math.max(1, speed / 30) ** 0.6;
@@ -765,7 +754,6 @@ function resetRun() {
   // pre-populate the road ahead
   section = { type: 'mixed', left: rand(320, 420) };
   lastSpecial = null;
-  sectionMarks.length = 0;
   for (let z = -45; z > SPAWN_Z; z -= 24) mixedRow(z);
   section.left -= -SPAWN_Z - 45;
   sinceRow = 0;
@@ -1725,16 +1713,6 @@ function update(dt) {
     }
   }
 
-  // --- section names ---
-  for (let i = sectionMarks.length - 1; i >= 0; i--) {
-    const m = sectionMarks[i];
-    m.z += dz;
-    if (m.z > -4) {
-      sectionMarks.splice(i, 1);
-      if (state === 'run') toast(m.def.name, m.def.sub);
-    }
-  }
-
   // --- milestones ---
   if (state === 'run' && milestoneI < MILESTONES.length && distance >= MILESTONES[milestoneI][0]) {
     const [m, txt] = MILESTONES[milestoneI++];
@@ -1824,4 +1802,4 @@ load().then(async () => {
 });
 
 // debug handle for testing in the browser console (local dev only)
-if (['localhost', '127.0.0.1'].includes(location.hostname)) window.__samrun = { player, samInner, camera, scene, act, get state() { return state; }, get speed() { return speed; }, obstacles, pickups, setGod(v) { invulnT = v ? 1e9 : 0; }, give(type) { collect({ type }); }, get run() { return run; }, get missions() { return missions; }, Account, get ground() { return ground; }, get section() { return section; }, forceSection(t) { section = { type: t, left: 300, fresh: true, lead: 5 }; lastSpecial = t; }, get power() { return power; }, get anim() { return currentAnim; }, arc(l, z) { coinArc(l, z); }, spawn(type, l, z, vz = 0) { return type === 'mosquito' ? spawnMosquito(z, vz ? 'weave' : 'bob', l) : spawnObstacle(type, LANES[l], z, vz); }, get shield() { return shield; }, set shield(v) { shield = v; }, speedFor, get lane() { return lane; }, get py() { return py; }, ramp(cars = 1) { busWithRamp(lane, -20, cars); }, step(n = 1) { for (let i = 0; i < n; i++) update(1 / 60); renderer.render(scene, camera); } };
+if (['localhost', '127.0.0.1'].includes(location.hostname)) window.__samrun = { player, samInner, camera, scene, act, get state() { return state; }, get speed() { return speed; }, obstacles, pickups, setGod(v) { invulnT = v ? 1e9 : 0; }, give(type) { collect({ type }); }, get run() { return run; }, get missions() { return missions; }, Account, get ground() { return ground; }, get section() { return section; }, forceSection(t) { section = { type: t, left: 300, lead: 5 }; lastSpecial = t; }, get power() { return power; }, get anim() { return currentAnim; }, arc(l, z) { coinArc(l, z); }, spawn(type, l, z, vz = 0) { return type === 'mosquito' ? spawnMosquito(z, vz ? 'weave' : 'bob', l) : spawnObstacle(type, LANES[l], z, vz); }, get shield() { return shield; }, set shield(v) { shield = v; }, speedFor, get lane() { return lane; }, get py() { return py; }, ramp(cars = 1) { busWithRamp(lane, -20, cars); }, step(n = 1) { for (let i = 0; i < n; i++) update(1 / 60); renderer.render(scene, camera); } };

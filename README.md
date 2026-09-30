@@ -20,13 +20,13 @@ Plain static site: three.js from a CDN, no build step. Hosted on Vercel at sam.j
 
 The protein-shake shield and the scooter each absorb one hit and blast the road clear around you. Oncoming buses shove anything parked in their lane out of the way.
 
-Past 3,000m, mosquitoes show up: weavers drift across all three lanes at head height (slide under), bobbers rise and fall in one lane (run under when high, jump when low). SKEETER SEASON is a whole section of them from 4,000m.
+Past 3,000m, mosquitoes show up: weavers drift across all three lanes at head height (slide under), bobbers rise and fall in one lane (run under when high, jump when low).
 
 Speed climbs to 30 by about 1,500m and holds there. Past 6,000m it starts climbing again, up to 46 around 20,000m.
 
 A hit leaves Sam injured for a few seconds. A second hit while injured, or running into the front of a bus, ends the run.
 
-The road alternates between the normal mix and themed sections, each announced as you reach it: GAINS ROAD (no obstacles, dumbbell snakes), SLUG STAMPEDE (rows of critters to jump), BANNER ALLEY (slide, jump, repeat), BUS YARD (whole stretches of bus roofs) and RUSH HOUR (oncoming Loop buses, from 1,000m). When Supersonic runs out it blasts the road clear ahead so you never land in something.
+The road alternates between the normal mix and stretches with their own layouts (no titles, the road just changes): a dumbbell road with no obstacles, a slug stampede of critters to jump, a banner alley (slide, jump, repeat), a bus yard of long roof runs, rush hour with oncoming Loop buses (from 1,000m) and mosquito swarms (from 4,000m). When Supersonic runs out it blasts the road clear ahead so you never land in something.
 
 Parked buses often have a ramp: run up it and along the roofs (bus trains are 2-3 buses long). Step off the side or the back and you drop back down.
 
