@@ -192,7 +192,8 @@ begin
      or p_duration is null or p_duration <= 0 or p_duration > 4 * 3600 then
     raise exception 'invalid run';
   end if;
-  if p_distance > p_duration * 48 + 20
+  -- late-game top speed with Supersonic is capped at 62 m/s (migration "samrun_faster_late_game")
+  if p_distance > p_duration * 75 + 20
      or p_gains > p_distance
      or p_digits > p_distance / 40 + 1
      or p_smashes > p_distance / 5 + 1

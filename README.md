@@ -16,6 +16,13 @@ Plain static site: three.js from a CDN, no build step. Hosted on Vercel at sam.j
 - Boost orb: supersonic, smash through everything
 - Phone: got her number (+250)
 - Blue shades: Sexy Mode, dumbbells from every lane can't resist him and fly in
+- E-scooter: mega jumps (high enough to land on a bus without a ramp), a bit faster, and it takes one hit for you
+
+The protein-shake shield and the scooter each absorb one hit and blast the road clear around you. Oncoming buses shove anything parked in their lane out of the way.
+
+Past 3,000m, mosquitoes show up: weavers drift across all three lanes at head height (slide under), bobbers rise and fall in one lane (run under when high, jump when low). SKEETER SEASON is a whole section of them from 4,000m.
+
+Speed climbs to 30 by about 1,500m and holds there. Past 6,000m it starts climbing again, up to 46 around 20,000m.
 
 A hit leaves Sam injured for a few seconds. A second hit while injured, or running into the front of a bus, ends the run.
 

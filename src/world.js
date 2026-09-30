@@ -244,17 +244,29 @@ const vcMatPlain = new THREE.MeshLambertMaterial({ color: 0x10325e });
 
 // ---------- obstacles ----------
 // Each builder returns an Object3D whose origin is at ground level, centered on its lane.
+// Bright banana-slug yellow with bold black spots, big enough to read at a distance, so it
+// never gets mistaken for a dumbbell.
 function buildSlug() {
-  const body = new THREE.CapsuleGeometry(0.42, 1.1, 4, 10);
+  const body = new THREE.CapsuleGeometry(0.5, 1.3, 4, 12);
   body.rotateX(Math.PI / 2);
-  body.scale(1, 0.75, 1);
-  const parts = [part(body, 0xf2d024, 0, 0.34, 0)];
-  // spots
-  for (let i = 0; i < 5; i++) parts.push(part(new THREE.SphereGeometry(0.1, 5, 4), 0x5a4a10, rand(-0.25, 0.25), 0.62, rand(-0.6, 0.4)));
-  // eye stalks toward the player (+z)
+  body.scale(1, 0.72, 1);
+  const parts = [part(body, 0xffe21a, 0, 0.38, 0)];
+  // slimy darker underside / foot
+  const foot = new THREE.CapsuleGeometry(0.46, 1.4, 3, 10);
+  foot.rotateX(Math.PI / 2);
+  foot.scale(1.08, 0.25, 1);
+  parts.push(part(foot, 0xc9a800, 0, 0.1, 0));
+  // big black spots
+  for (let i = 0; i < 9; i++) {
+    const sp = new THREE.SphereGeometry(rand(0.09, 0.14), 6, 4);
+    sp.scale(1, 0.45, 1);
+    parts.push(part(sp, 0x1b1406, rand(-0.3, 0.3), 0.7, rand(-0.8, 0.5)));
+  }
+  // eye stalks toward the player (+z), with white eyes
   for (const s of [-1, 1]) {
-    parts.push(part(new THREE.CylinderGeometry(0.04, 0.05, 0.55, 5), 0xe0c020, s * 0.14, 0.72, 0.72, -0.5, 0, s * 0.25));
-    parts.push(part(new THREE.SphereGeometry(0.08, 6, 5), 0x1b1030, s * 0.2, 0.97, 0.86));
+    parts.push(part(new THREE.CylinderGeometry(0.05, 0.06, 0.7, 6), 0xf5d400, s * 0.16, 0.85, 0.85, -0.5, 0, s * 0.25));
+    parts.push(part(new THREE.SphereGeometry(0.12, 8, 6), 0xffffff, s * 0.24, 1.15, 1.02));
+    parts.push(part(new THREE.SphereGeometry(0.065, 6, 5), 0x111111, s * 0.25, 1.16, 1.12));
   }
   return merged(parts);
 }
@@ -371,6 +383,45 @@ function buildRamp() {
   return m;
 }
 
+// Mosquito: a giant UCSC redwood-forest skeeter. Built facing the player (+z); main.js
+// moves it and flaps userData.wings.
+const wingMat = new THREE.MeshBasicMaterial({ color: 0xe8f6ff, transparent: true, opacity: 0.65, side: THREE.DoubleSide, depthWrite: false });
+function buildMosquito() {
+  const g = new THREE.Group();
+  const parts = [];
+  const thorax = new THREE.SphereGeometry(0.2, 10, 8);
+  thorax.scale(1, 0.9, 1.1);
+  parts.push(part(thorax, 0x3a2a22, 0, 0, 0));
+  // striped abdomen trailing away from the player
+  for (let i = 0; i < 4; i++) {
+    const seg = new THREE.SphereGeometry(0.16 - i * 0.02, 8, 6);
+    seg.scale(1, 0.85, 1.3);
+    parts.push(part(seg, i % 2 ? 0xe8e0d0 : 0x2a1c16, 0, 0.04 + i * 0.03, -0.28 - i * 0.2));
+  }
+  // head, red eyes, long proboscis pointing at Sam
+  parts.push(part(new THREE.SphereGeometry(0.13, 8, 6), 0x2a1c16, 0, 0.02, 0.25));
+  for (const s of [-1, 1]) parts.push(part(new THREE.SphereGeometry(0.075, 6, 5), 0xd4202c, s * 0.08, 0.06, 0.32));
+  parts.push(part(new THREE.CylinderGeometry(0.012, 0.02, 0.55, 5), 0x1b1030, 0, -0.05, 0.6, Math.PI / 2 + 0.25));
+  // six long dangly legs
+  for (const s of [-1, 1]) {
+    for (let i = 0; i < 3; i++) {
+      parts.push(part(new THREE.CylinderGeometry(0.012, 0.012, 0.75, 4), 0x2a1c16, s * 0.22, -0.3, 0.1 - i * 0.18, 0.15 * (i - 1), 0, s * 0.45));
+    }
+  }
+  g.add(merged(parts, false));
+  const wing = new THREE.PlaneGeometry(0.75, 0.2);
+  wing.translate(0.375, 0, 0);
+  g.userData.wings = [-1, 1].map((s) => {
+    const w = new THREE.Mesh(wing, wingMat);
+    w.position.set(s * 0.08, 0.15, -0.05);
+    w.rotation.set(-Math.PI / 2, s < 0 ? Math.PI : 0, 0);
+    g.add(w);
+    return w;
+  });
+  g.scale.setScalar(1.25);
+  return g;
+}
+
 // Obstacle catalogue: hitbox is [bottom, top] vertically, w wide (x), len deep (z).
 // The bus's hit top sits below its roof so you can land on it (and run off a ramp onto it).
 export const OBSTACLES = {
@@ -382,24 +433,31 @@ export const OBSTACLES = {
   bannerWide: { w: PATH_W - 0.4, len: 0.3, bottom: 1.35, top: 2.8, wide: true, build: () => buildBanner(PATH_W - 0.4) },
   bus: { w: 2.0, len: 10, bottom: 0, top: 2.4, build: buildBus },
   ramp: { w: 2.0, len: RAMP_LEN, bottom: 0, top: 0, ramp: true, build: buildRamp },
+  // bottom/top follow the mosquito as it moves (see main.js)
+  mosquito: { w: 0.9, len: 0.8, bottom: 1.0, top: 1.7, build: buildMosquito },
 };
 
 // ---------- pickups ----------
-const goldMat = new THREE.MeshStandardMaterial({ color: 0xffc933, emissive: 0x6b4200, metalness: 0.7, roughness: 0.3 });
-let dumbbellGeo;
+// Dumbbells: black gym plates with a bright chrome bar and a light glow, nothing like the
+// yellow banana slugs.
+const plateMat = new THREE.MeshStandardMaterial({ color: 0x2a2f3d, emissive: 0x1a2140, metalness: 0.3, roughness: 0.4 });
+const barMat = new THREE.MeshStandardMaterial({ color: 0xf2f5f8, emissive: 0x6a7480, metalness: 0.4, roughness: 0.2 });
+let barGeo, plateGeo;
 function buildDumbbell() {
-  dumbbellGeo ||= (() => {
-    const parts = [new THREE.CylinderGeometry(0.06, 0.06, 0.8, 8).rotateZ(Math.PI / 2)];
+  barGeo ||= new THREE.CylinderGeometry(0.065, 0.065, 0.86, 8).rotateZ(Math.PI / 2);
+  plateGeo ||= (() => {
+    const parts = [];
     for (const s of [-1, 1]) {
-      parts.push(new THREE.CylinderGeometry(0.22, 0.22, 0.1, 12).rotateZ(Math.PI / 2).translate(s * 0.28, 0, 0));
-      parts.push(new THREE.CylinderGeometry(0.17, 0.17, 0.08, 12).rotateZ(Math.PI / 2).translate(s * 0.36, 0, 0));
+      parts.push(new THREE.CylinderGeometry(0.24, 0.24, 0.11, 14).rotateZ(Math.PI / 2).translate(s * 0.27, 0, 0));
+      parts.push(new THREE.CylinderGeometry(0.18, 0.18, 0.09, 14).rotateZ(Math.PI / 2).translate(s * 0.36, 0, 0));
     }
     return mergeGeometries(parts);
   })();
-  const m = new THREE.Mesh(dumbbellGeo, goldMat);
   const g = new THREE.Group();
-  m.rotation.z = 0.5;
-  g.add(m);
+  const d = new THREE.Group();
+  d.add(new THREE.Mesh(barGeo, barMat), new THREE.Mesh(plateGeo, plateMat));
+  d.rotation.z = 0.5;
+  g.add(d);
   return g;
 }
 
@@ -513,6 +571,30 @@ function buildShades() {
   return g;
 }
 
+// Electric scooter: built at riding size with its front toward -z (the way Sam runs).
+export function buildScooterModel() {
+  const parts = [
+    part(new THREE.BoxGeometry(0.2, 0.06, 0.95), 0x1f2430, 0, 0.12, 0), // deck
+    part(new THREE.BoxGeometry(0.18, 0.015, 0.8), 0x3aff9a, 0, 0.158, 0.02), // glowing grip strip
+    part(new THREE.CylinderGeometry(0.025, 0.025, 1.0, 6), 0x9aa3b0, 0, 0.62, -0.46, -0.12), // stem
+    part(new THREE.CylinderGeometry(0.02, 0.02, 0.5, 6), 0x1f2430, 0, 1.1, -0.52, 0, 0, Math.PI / 2), // handlebar
+    part(new THREE.BoxGeometry(0.1, 0.06, 0.04), 0x3aff9a, 0, 0.98, -0.52), // headlight/display
+  ];
+  for (const z of [-0.45, 0.42]) parts.push(part(new THREE.CylinderGeometry(0.1, 0.1, 0.06, 12), 0x111111, 0, 0.1, z, 0, 0, Math.PI / 2));
+  const m = merged(parts);
+  m.material = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x06301a });
+  return m;
+}
+
+function buildScooter() {
+  const g = new THREE.Group();
+  const m = buildScooterModel();
+  m.position.y = -0.6;
+  m.rotation.y = 0.6;
+  g.add(m, glowRing(0x3aff9a));
+  return g;
+}
+
 let _sparkleTex, _heartTex;
 export function sparkleTex() {
   return (_sparkleTex ||= canvasTex(64, 64, (c, w, h) => {
@@ -545,4 +627,5 @@ export const PICKUPS = {
   shake: { build: buildShake, y: 1.0 },
   phone: { build: buildPhone, y: 1.1 },
   shades: { build: buildShades, y: 1.05 },
+  scooter: { build: buildScooter, y: 1.0 },
 };

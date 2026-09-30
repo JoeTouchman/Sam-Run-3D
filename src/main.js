@@ -9,7 +9,7 @@ import {
 import {
   LANE_W, LANES, PATH_W, GROUND_LEN, CHUNK, ROOF_Y, RAMP_LEN,
   makePathTexture, makeGrassTexture, makeSky, buildChunk, buildArch, OBSTACLES, PICKUPS,
-  buildShadesModel, heartTex, sparkleTex,
+  buildShadesModel, buildScooterModel, heartTex, sparkleTex,
 } from './world.js';
 
 const $ = (id) => document.getElementById(id);
@@ -29,13 +29,19 @@ const SPAWN_Z = -150;
 const DESPAWN_Z = 12;
 const GRAVITY = 36;
 const JUMP_V = 12;
+const SCOOTER_JUMP_V = 17.5; // apex ~4.25m: high enough to land on a bus roof without a ramp
 const SLIDE_TIME = 1.0;
 const START_SPEED = 13;
-const MAX_SPEED = 30;
 const INJURY_TIME = 6;
-const POWER_TIME = { beer: 9, boost: 5, shades: 10 };
+const POWER_TIME = { beer: 9, boost: 5, shades: 10, scooter: 12 };
 const MAGNET_RANGE = 10; // how far ahead the Sexy Mode shades pull dumbbells from
 const TILE = 8; // path texture tile length (world units)
+
+// Speed ramps up to 30 by ~1,500m and plateaus. Past 6,000m it starts climbing again,
+// slowly, toward 46 around 20,000m, so the really long runs get really fast.
+function speedFor(d) {
+  return Math.min(30, START_SPEED + d * 0.011) + (d > 6000 ? Math.min(16, (d - 6000) * 0.0011) : 0);
+}
 
 // ---------- copy ----------
 const HIT_QUIPS = ['Pulled a hammy!', 'Not the quads!!', 'Walk it off, bro', 'That one’s going on the story', 'Ice bath tonight', 'Bro’s limping'];
@@ -47,6 +53,7 @@ const ROASTS = {
   banner: ['Clotheslined by a campus banner.', 'Forgot to duck. Go Slugs, I guess.'],
   bannerWide: ['Clotheslined by a campus banner.', 'Forgot to duck. Go Slugs, I guess.'],
   bus: ['Hit by the Loop bus. At least it was on time for once.', 'Should’ve taken the bus instead of getting hit by it.'],
+  mosquito: ['Drained by a mosquito. Should’ve packed bug spray.', 'The redwood skeeters got him.', 'Lost a fight to a bug. A single bug.'],
 };
 const GENERIC_ROASTS = ['She’s not texting back, bro.', 'Worse than your Rocket League ranked games.', 'Should’ve skipped the 4th White Claw.', 'The blondes at Cowell saw that.'];
 const PHONE_QUIPS = ['Got her instagram!', 'She followed back!', 'Digits secured!', 'Got her number!'];
@@ -174,6 +181,11 @@ const bubble = new THREE.Mesh(
 bubble.position.y = 0.95;
 bubble.visible = false;
 player.add(bubble);
+
+// e-scooter he rides while the power-up lasts
+const scooterRide = buildScooterModel();
+scooterRide.visible = false;
+player.add(scooterRide);
 
 // Sexy Mode shades: worn on Sam's face, a pink aura, and hearts floating off him
 const aura = new THREE.Mesh(
@@ -397,7 +409,7 @@ let runTime = 0;
 let injuredT = 0;
 let invulnT = 0;
 let shield = false;
-const power = { beer: 0, boost: 0, shades: 0 };
+const power = { beer: 0, boost: 0, shades: 0, scooter: 0 };
 let ground = 0; // height of whatever Sam is standing on (0, a ramp, or a bus roof)
 // per-run counters for missions
 let run = {};
@@ -475,7 +487,7 @@ function coinArc(laneI, z) {
 
 function spawnPower(laneI, z, y) {
   const r = Math.random();
-  const type = r < 0.22 ? 'beer' : r < 0.42 ? 'boost' : r < 0.62 ? 'shake' : r < 0.82 ? 'shades' : 'phone';
+  const type = r < 0.19 ? 'beer' : r < 0.35 ? 'boost' : r < 0.52 ? 'shake' : r < 0.68 ? 'shades' : r < 0.85 ? 'scooter' : 'phone';
   spawnPickup(type, LANES[laneI], z, y);
 }
 
@@ -489,6 +501,21 @@ function busWithRamp(laneI, zFront, cars = 1) {
   for (let d = 1; d < roofLen - 1; d += 2.3) spawnPickup('gains', LANES[laneI], zFront - RAMP_LEN - d, ROOF_Y + 0.9);
   return RAMP_LEN + roofLen;
 }
+
+// Mosquitoes move in one of two readable patterns: weavers drift across all three lanes at
+// head height (slide under them), bobbers stay in a lane and rise and fall (run under them
+// when they're up, jump them when they're low).
+function spawnMosquito(z, kind = Math.random() < 0.55 ? 'weave' : 'bob', laneI = Math.floor(Math.random() * 3)) {
+  const o = spawnObstacle('mosquito', LANES[laneI], z);
+  o.kind = kind;
+  o.baseX = LANES[laneI];
+  o.t = 0;
+  o.phase = Math.random() * Math.PI * 2;
+  o.freq = kind === 'weave' ? rand(1.6, 2.2) : rand(2.2, 2.8);
+  o.y = 1.35;
+  return o;
+}
+const mosquitoChance = (d) => (d < 3000 ? 0 : Math.min(0.45, 0.12 + (d - 3000) / 25000));
 
 // The normal mix: what the road looks like between themed sections. Returns the gap to the next row.
 function mixedRow(z) {
@@ -551,6 +578,7 @@ function mixedRow(z) {
     if (d > 60 && Math.random() < 0.09) spawnPower(fl, z - 6);
     else if (Math.random() < 0.75) coinLine(fl, z + 4, 5 + Math.floor(Math.random() * 4));
   }
+  if (Math.random() < mosquitoChance(d)) spawnMosquito(z - 9);
   // extra leaves room so the next row doesn't land on top of a long bus train
   return clamp(26 - distance * 0.004, 17, 26) + rand(-2, 4) + extra;
 }
@@ -568,6 +596,7 @@ const SECTIONS = {
   // oncoming buses close in fast, so leave a long empty lead-in: nothing parked from the
   // previous section can end up level with them
   traffic: { name: 'RUSH HOUR', sub: 'Loop buses incoming', len: [260, 360], minD: 1000, lead: 70, row: trafficRow },
+  skeeter: { name: 'SKEETER SEASON', sub: 'Watch how they move', len: [240, 340], minD: 4000, row: skeeterRow },
 };
 let section = null;
 let lastSpecial = null;
@@ -598,7 +627,9 @@ function spawnRow(z) {
       sinceArch = 0;
     }
   }
-  const gap = def.row(z);
+  // past the plateau Sam covers more ground per jump, so rows spread out a little with speed
+  // (less than speed grows, so it still gets harder)
+  const gap = def.row(z) * Math.max(1, speed / 30) ** 0.6;
   section.left -= gap;
   return gap;
 }
@@ -679,6 +710,20 @@ function busyardRow(z) {
   return longest + rand(3, 7);
 }
 
+// SKEETER SEASON: waves of mosquitoes, sometimes with a critter underneath to jump
+function skeeterRow(z) {
+  const lanes = [0, 1, 2].sort(() => Math.random() - 0.5);
+  if (Math.random() < 0.5) {
+    spawnMosquito(z, 'weave');
+  } else {
+    spawnMosquito(z, 'bob', lanes[0]);
+    spawnMosquito(z - rand(0, 3), 'bob', lanes[1]);
+  }
+  if (Math.random() < 0.35) spawnObstacle(pick(['slug', 'turkey']), LANES[lanes[2]], z - 10);
+  coinLine(lanes[2], z + 4, 5);
+  return rand(20, 24);
+}
+
 // RUSH HOUR: one oncoming Loop bus per row; the other lanes only ever hold jumpable stuff
 function trafficRow(z) {
   const lanes = [0, 1, 2].sort(() => Math.random() - 0.5);
@@ -696,7 +741,7 @@ function resetRun() {
   speed = 0; distance = 0; score = 0; gains = 0; digits = 0; smashes = 0; runTime = 0;
   injuredT = 0; invulnT = 0; shield = false; power.beer = 0; power.boost = 0;
   shake = 0; milestoneI = 0; sinceRow = 0; rowGap = 24; rowsSinceBus = 99; killer = null; sinceArch = 0;
-  power.shades = 0; ground = 0; camGround = 0;
+  power.shades = 0; power.scooter = 0; ground = 0; camGround = 0;
   run = { gains: 0, distance: 0, jumps: 0, banners: 0, roof: 0, ramps: 0, digits: 0, smash: 0, shades: 0, rizzGains: 0, clean: 0, drunkGains: 0, sinceHit: 0 };
   missionRun = new MissionRun(missions);
   lastResult = null;
@@ -746,6 +791,7 @@ function updatePowersHud() {
   if (power.boost > 0) items.push(['boost', power.boost / POWER_TIME.boost]);
   if (power.beer > 0) items.push(['cup', power.beer / POWER_TIME.beer]);
   if (power.shades > 0) items.push(['shades', power.shades / POWER_TIME.shades]);
+  if (power.scooter > 0) items.push(['scooter', power.scooter / POWER_TIME.scooter]);
   if (shield) items.push(['shake', 1]);
   if (injuredT > 0) items.push(['bandage', injuredT / INJURY_TIME]);
   const key = items.map((i) => i[0] + Math.round(i[1] * 40)).join();
@@ -772,10 +818,11 @@ function act(a) {
   else if (a === 'right' && lane < 2) { prevLane = lane; lane++; Sound.play('lane'); }
   else if (a === 'up') {
     if (grounded) {
-      vy = JUMP_V; grounded = false; slideT = 0; queuedSlide = false;
+      const v = power.scooter > 0 ? SCOOTER_JUMP_V : JUMP_V;
+      vy = v; grounded = false; slideT = 0; queuedSlide = false;
       run.jumps++;
-      Sound.play('jump');
-      playOnce('jump', actions.jump ? actions.jump.getClip().duration / (2 * JUMP_V / GRAVITY) : 1);
+      Sound.play('jump', { rate: power.scooter > 0 ? 1.25 : 1 });
+      playOnce('jump', actions.jump ? actions.jump.getClip().duration / (2 * v / GRAVITY) : 1);
     }
   } else if (a === 'down') {
     if (!grounded) { vy = -24; queuedSlide = true; }
@@ -1292,9 +1339,22 @@ function gameOver() {
 
 function hit(o) {
   if (invulnT > 0 || o.dead) return;
-  if (power.boost > 0 || shield) {
+  if (power.boost > 0) { smash(o); return; }
+  // the scooter and the shake shield each take one hit for you and clear the road around you
+  if (power.scooter > 0) {
+    power.scooter = 0;
     smash(o);
-    if (power.boost <= 0) { shield = false; toast('SHIELD POPPED', 'Protein saved you'); invulnT = 0.8; }
+    clearTheWay();
+    invulnT = 1.2;
+    toast(`${icon('scooter')} SCOOTER WRECKED`, 'It took the hit for you');
+    return;
+  }
+  if (shield) {
+    shield = false;
+    smash(o);
+    clearTheWay();
+    invulnT = 1.2;
+    toast('SHIELD POPPED', 'Protein saved you');
     return;
   }
   shake = 0.5;
@@ -1360,6 +1420,11 @@ function collect(p) {
       if (injuredT > 0) { injuredT = 0; toast(`${icon('shake')} PROTEIN SHAKE`, 'Fully healed. Gains restored'); }
       else { shield = true; toast(`${icon('shake')} PROTEIN SHAKE`, 'Shield up'); }
       break;
+    case 'scooter':
+      power.scooter = POWER_TIME.scooter;
+      Sound.play('lane', { rate: 1.4 });
+      toast(`${icon('scooter')} E-SCOOTER`, 'Mega jumps + one free hit');
+      break;
     case 'shades':
       power.shades = POWER_TIME.shades; run.shades++;
       Sound.play('phone', { rate: 1.25, vol: 0.7 });
@@ -1411,10 +1476,11 @@ function update(dt) {
   if (state === 'paused' || state === 'over') return;
 
   // --- speed ---
-  const target = Math.min(MAX_SPEED, START_SPEED + distance * 0.011);
+  const target = speedFor(distance);
   let want = target;
   if (injuredT > 0) want *= 0.82;
-  if (power.boost > 0) want *= 1.55;
+  if (power.boost > 0) want = Math.min(want * 1.55, 62);
+  else if (power.scooter > 0) want = Math.min(want * 1.2, 55);
   if (state === 'intro') {
     introT += dt;
     want = target * Math.min(1, introT / 1.2);
@@ -1496,19 +1562,24 @@ function update(dt) {
   if (power.boost > 0) { power.boost = Math.max(0, power.boost - dt); if (power.boost === 0) { Sound.boost(false); if (state === 'run') clearTheWay(); } }
   if (power.beer > 0) { power.beer = Math.max(0, power.beer - dt); if (power.beer === 0) $('drunkfx').classList.remove('on'); }
   if (power.shades > 0) power.shades = Math.max(0, power.shades - dt);
+  if (power.scooter > 0) { power.scooter = Math.max(0, power.scooter - dt); if (power.scooter === 0 && state === 'run') toast('Scooter died', 'Battery’s dead'); }
   samInner.visible = invulnT > 0 && invulnT < 10 && power.boost <= 0 && !shield ? Math.floor(invulnT * 12) % 2 === 0 : true;
+  const riding = power.scooter > 0 && state !== 'dying';
+  scooterRide.visible = riding && samInner.visible && !(power.scooter < 1.5 && Math.floor(elapsed * 8) % 2);
+  samInner.position.y = riding ? 0.16 : 0;
 
   // --- animation choice ---
   if ((state === 'run' || state === 'intro') && grounded && slideT <= 0) {
     let anim = 'run';
     if (power.boost > 0) anim = 'fast';
+    else if (power.scooter > 0) anim = 'slow'; // gentle kick-push on the deck
     else if (injuredT > 0) anim = 'injured';
     else if (power.beer > 0) anim = 'drunk';
     else if (runTime < 1.4) anim = 'slow';
     else if (speed > 23) anim = 'fast';
     setAnim(anim);
     const a = actions[currentAnim];
-    if (a) a.timeScale = clamp(speed / (ANIM_REF_SPEED[currentAnim] || 14), 0.75, 1.5);
+    if (a) a.timeScale = power.scooter > 0 && power.boost <= 0 ? 0.6 : clamp(speed / (ANIM_REF_SPEED[currentAnim] || 14), 0.75, 1.5);
   }
 
   // --- effects ---
@@ -1541,6 +1612,27 @@ function update(dt) {
       o.mesh.position.y += o.fly.vy * dt;
       o.mesh.rotation.x += o.fly.spin * dt;
       o.mesh.rotation.z += o.fly.spin * 0.7 * dt;
+    }
+    if (o.type === 'mosquito' && !o.fly) {
+      o.t += dt;
+      const w = Math.sin(o.t * o.freq + o.phase);
+      if (o.kind === 'weave') o.x = w * LANE_W;
+      else o.y = 1.35 + w * 0.95;
+      o.bottom = o.y - 0.35;
+      o.top = o.y + 0.35;
+      o.mesh.position.y = o.y;
+      o.mesh.rotation.z = o.kind === 'weave' ? -Math.cos(o.t * o.freq + o.phase) * 0.35 : 0;
+      for (const [k, wing] of o.mesh.userData.wings.entries()) wing.rotation.z = (k ? 1 : -1) * Math.sin(elapsed * 60) * 0.5;
+    }
+    // a moving bus plows whatever's parked in its lane out of the way instead of driving through it
+    if (o.vz > 0 && !o.dead && o.type === 'bus') {
+      for (const q of obstacles) {
+        if (q === o || q.dead || q.fly || q.type === 'bus' || q.ramp) continue;
+        if (Math.abs(q.x - o.x) < 1.2 && Math.abs(q.z - o.z) < (o.len + q.len) / 2) {
+          q.dead = true;
+          q.fly = { vy: rand(7, 10), vx: (q.x >= o.x ? 1 : -1) * rand(4, 7), spin: rand(-8, 8) };
+        }
+      }
     }
     o.mesh.position.x = o.x;
     o.mesh.position.z = o.z;
@@ -1693,4 +1785,4 @@ load().then(async () => {
 });
 
 // debug handle for testing in the browser console (local dev only)
-if (['localhost', '127.0.0.1'].includes(location.hostname)) window.__samrun = { player, samInner, camera, scene, act, get state() { return state; }, get speed() { return speed; }, obstacles, pickups, setGod(v) { invulnT = v ? 1e9 : 0; }, give(type) { collect({ type }); }, get run() { return run; }, get missions() { return missions; }, Account, get ground() { return ground; }, get section() { return section; }, forceSection(t) { section = { type: t, left: 300, fresh: true, lead: 5 }; lastSpecial = t; }, get power() { return power; }, get lane() { return lane; }, get py() { return py; }, ramp(cars = 1) { busWithRamp(lane, -20, cars); }, step(n = 1) { for (let i = 0; i < n; i++) update(1 / 60); renderer.render(scene, camera); } };
+if (['localhost', '127.0.0.1'].includes(location.hostname)) window.__samrun = { player, samInner, camera, scene, act, get state() { return state; }, get speed() { return speed; }, obstacles, pickups, setGod(v) { invulnT = v ? 1e9 : 0; }, give(type) { collect({ type }); }, get run() { return run; }, get missions() { return missions; }, Account, get ground() { return ground; }, get section() { return section; }, forceSection(t) { section = { type: t, left: 300, fresh: true, lead: 5 }; lastSpecial = t; }, get power() { return power; }, spawn(type, l, z, vz = 0) { return type === 'mosquito' ? spawnMosquito(z, vz ? 'weave' : 'bob', l) : spawnObstacle(type, LANES[l], z, vz); }, get shield() { return shield; }, set shield(v) { shield = v; }, speedFor, get lane() { return lane; }, get py() { return py; }, ramp(cars = 1) { busWithRamp(lane, -20, cars); }, step(n = 1) { for (let i = 0; i < n; i++) update(1 / 60); renderer.render(scene, camera); } };
