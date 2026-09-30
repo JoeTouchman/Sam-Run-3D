@@ -12,48 +12,62 @@ export const skinById = (id) => SKINS.find((s) => s.id === id) || SKINS[0];
 
 // ---------- missions ----------
 // perRun: best single-run value counts; otherwise progress adds up across runs.
-// Each template has 5 tiers. A set is one easy, one medium and one hard mission (three tiers in a
-// row), and the whole ladder shifts up a tier every few sets.
+// Each template has 5 tiers of roughly matching effort (tier 0 is about a solid 3,000m run).
+// A set is one easy, one medium and one hard mission (three tiers in a row), and the whole
+// ladder shifts up a tier every 3 sets.
 const TEMPLATES = [
-  { id: 'gains', perRun: true, text: (n) => `Collect ${n} dumbbells in one run`, tiers: [50, 100, 175, 275, 400] },
-  { id: 'distance', perRun: true, text: (n) => `Run ${n.toLocaleString()}m in one run`, tiers: [500, 1000, 1600, 2500, 4000] },
-  { id: 'jumps', text: (n) => `Jump ${n} times`, tiers: [25, 50, 80, 120, 180] },
-  { id: 'banners', text: (n) => `Slide under ${n} banners`, tiers: [5, 12, 20, 30, 45] },
-  { id: 'roof', text: (n) => `Run ${n}m on bus roofs`, tiers: [60, 150, 300, 500, 800] },
-  { id: 'ramps', text: (n) => `Ride up ${n} bus ramps`, tiers: [3, 6, 10, 15, 22] },
-  { id: 'digits', perRun: true, text: (n) => `Get ${n} number${n > 1 ? 's' : ''} in one run`, tiers: [1, 2, 3, 4, 6] },
-  { id: 'smash', text: (n) => `Smash ${n} obstacles in Supersonic`, tiers: [3, 6, 10, 16, 24] },
-  { id: 'shades', text: (n) => `Go Sexy Mode ${n} time${n > 1 ? 's' : ''}`, tiers: [1, 2, 4, 6, 9] },
-  { id: 'rizzGains', text: (n) => `Pull in ${n} dumbbells in Sexy Mode`, tiers: [30, 70, 130, 200, 300] },
-  { id: 'clean', perRun: true, text: (n) => `Run ${n.toLocaleString()}m without getting hurt`, tiers: [300, 600, 1000, 1600, 2500] },
-  { id: 'drunkGains', text: (n) => `Collect ${n} dumbbells in Drunk mode`, tiers: [20, 50, 90, 140, 200] },
+  { id: 'distance', perRun: true, text: (n) => `Run ${n.toLocaleString()}m in one run`, tiers: [3000, 5000, 8000, 12000, 18000] },
+  { id: 'clean', perRun: true, text: (n) => `Run ${n.toLocaleString()}m without getting hurt`, tiers: [1000, 2000, 3500, 5000, 8000] },
+  { id: 'gains', perRun: true, text: (n) => `Collect ${n.toLocaleString()} dumbbells in one run`, tiers: [400, 700, 1100, 1600, 2500] },
+  { id: 'digits', perRun: true, text: (n) => `Get ${n} numbers in one run`, tiers: [3, 5, 8, 12, 18] },
+  { id: 'jumps', text: (n) => `Jump ${n.toLocaleString()} times`, tiers: [150, 300, 500, 800, 1200] },
+  { id: 'banners', text: (n) => `Slide under ${n.toLocaleString()} banners`, tiers: [40, 80, 140, 220, 350] },
+  { id: 'roof', text: (n) => `Run ${n.toLocaleString()}m on bus roofs`, tiers: [800, 1600, 3000, 5000, 8000] },
+  { id: 'ramps', text: (n) => `Ride up ${n.toLocaleString()} bus ramps`, tiers: [25, 50, 90, 140, 220] },
+  { id: 'smash', text: (n) => `Smash ${n.toLocaleString()} obstacles in Supersonic`, tiers: [30, 60, 100, 160, 250] },
+  { id: 'shades', text: (n) => `Go Sexy Mode ${n} times`, tiers: [8, 15, 25, 40, 60] },
+  { id: 'rizzGains', text: (n) => `Pull in ${n.toLocaleString()} dumbbells in Sexy Mode`, tiers: [300, 600, 1000, 1600, 2500] },
+  { id: 'drunkGains', text: (n) => `Collect ${n.toLocaleString()} dumbbells in Drunk mode`, tiers: [250, 500, 900, 1400, 2200] },
 ];
 const byId = Object.fromEntries(TEMPLATES.map((t) => [t.id, t]));
+const MISSIONS_VERSION = 2; // bump when the tiers change so old saves get fresh lists
 
-export const setReward = (set) => Math.min(2000, 250 + set * 150);
+// The server caps a run's mission bonus at 2,000.
+export const setReward = (set) => Math.min(2000, 750 + set * 250);
 
 export const DIFFS = ['easy', 'medium', 'hard'];
 
-// Deterministic per set so everyone's set N is the same three missions.
-function missionsForSet(set) {
-  let seed = (set + 1) * 2654435761 % 4294967296;
-  const rnd = () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; };
+// Which three missions a set gets depends on the set number and the day it started,
+// so a new set rolls a different mix each day. A set in progress stays put until it's done.
+function missionsForSet(set, day) {
+  let seed = 2166136261;
+  for (const ch of `${set}|${day}`) seed = Math.imul(seed ^ ch.charCodeAt(0), 16777619) >>> 0;
+  const rnd = () => { // mulberry32
+    seed = (seed + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(seed ^ (seed >>> 15), seed | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
   const ids = TEMPLATES.map((t) => t.id);
   for (let i = ids.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [ids[i], ids[j]] = [ids[j], ids[i]]; }
   const base = Math.min(2, Math.floor(set / 3));
   return ids.slice(0, 3).map((id, i) => ({ id, diff: DIFFS[i], target: byId[id].tiers[base + i], prog: 0 }));
 }
 
-export function freshMissions() { return { set: 0, list: missionsForSet(0) }; }
+function newSet(set) {
+  const day = todayPT();
+  return { v: MISSIONS_VERSION, set, day, list: missionsForSet(set, day) };
+}
+
+export function freshMissions() { return newSet(0); }
 
 export function validMissions(m) {
   return m && Number.isInteger(m.set) && Array.isArray(m.list) && m.list.length === 3 && m.list.every((x) => byId[x.id]);
 }
 
-// Saves from before missions had difficulties get a fresh easy/medium/hard list for the same set.
+// Saves from an older mission table get a fresh list for the same set.
 export function upgradeMissions(m) {
-  if (m.list.every((x) => DIFFS.includes(x.diff))) return m;
-  return { set: m.set, list: missionsForSet(m.set) };
+  return m.v === MISSIONS_VERSION ? m : newSet(m.set);
 }
 
 export const missionText = (m) => byId[m.id].text(m.target);
@@ -84,8 +98,7 @@ export class MissionRun {
   finish() {
     if (!this.allDone) return 0;
     const reward = setReward(this.state.set);
-    this.state.set += 1;
-    this.state.list = missionsForSet(this.state.set);
+    Object.assign(this.state, newSet(this.state.set + 1));
     return reward;
   }
 }
