@@ -30,7 +30,7 @@ const SPAWN_Z = -150;
 const DESPAWN_Z = 12;
 const GRAVITY = 36;
 const JUMP_V = 12;
-const SCOOTER_JUMP_V = 17.5; // apex ~4.25m: high enough to land on a bus roof without a ramp
+const SCOOTER_JUMP_V = 16.2; // apex ~3.65m: just high enough to land on a bus roof (3.05) without a ramp
 const SLIDE_TIME = 1.0;
 const START_SPEED = 13;
 const INJURY_TIME = 6;
@@ -416,6 +416,9 @@ let invulnT = 0;
 let shield = false;
 const power = { beer: 0, boost: 0, shades: 0, scooter: 0 };
 let ground = 0; // height of whatever Sam is standing on (0, a ramp, or a bus roof)
+// During a scooter jump: time since takeoff and takeoff height, for the normal-jump "ghost" arc
+// that dumbbells are collected along (-1 when not in a scooter jump)
+let ghostT = -1, ghostY = 0;
 // per-run counters for missions
 let run = {};
 let missions = loadLocalMissions();
@@ -748,7 +751,7 @@ function resetRun() {
   speed = 0; distance = 0; score = 0; gains = 0; digits = 0; smashes = 0; runTime = 0;
   injuredT = 0; invulnT = 0; shield = false; power.beer = 0; power.boost = 0;
   shake = 0; milestoneI = 0; sinceRow = 0; rowGap = 24; rowsSinceBus = 99; killer = null; sinceArch = 0;
-  power.shades = 0; power.scooter = 0; ground = 0; camGround = 0;
+  power.shades = 0; power.scooter = 0; ground = 0; camGround = 0; ghostT = -1;
   run = { gains: 0, distance: 0, jumps: 0, banners: 0, roof: 0, ramps: 0, digits: 0, smash: 0, shades: 0, rizzGains: 0, clean: 0, drunkGains: 0, sinceHit: 0 };
   missionRun = new MissionRun(missions);
   lastResult = null;
@@ -816,7 +819,8 @@ function showScreen(id) {
 function startSlide() {
   slideT = SLIDE_TIME;
   Sound.play('lane', { rate: 0.75 });
-  playOnce('slide', actions.slide ? actions.slide.getClip().duration / SLIDE_TIME : 1, 0.08);
+  // on the scooter it's an Akira-style power slide (the whole rig skids sideways, see update)
+  if (power.scooter <= 0) playOnce('slide', actions.slide ? actions.slide.getClip().duration / SLIDE_TIME : 1, 0.08);
 }
 
 function act(a) {
@@ -826,6 +830,9 @@ function act(a) {
   else if (a === 'up') {
     if (grounded) {
       const v = power.scooter > 0 ? SCOOTER_JUMP_V : JUMP_V;
+      // scooter jumps fly higher, but dumbbells get collected along a normal jump's arc
+      ghostT = power.scooter > 0 ? 0 : -1;
+      ghostY = py;
       vy = v; grounded = false; slideT = 0; queuedSlide = false;
       run.jumps++;
       Sound.play('jump', { rate: power.scooter > 0 ? 1.25 : 1 });
@@ -1450,6 +1457,11 @@ function collect(p) {
   }
 }
 
+// Where Sam would be mid-jump if this scooter jump were a normal one (lands back at takeoff height)
+function ghostHeight() {
+  return ghostY + Math.max(0, JUMP_V * ghostT - 0.5 * GRAVITY * ghostT * ghostT);
+}
+
 // Height of the surface under Sam: a ramp's slope or a bus roof, else the path.
 // Surfaces only count when Sam is already near or above them, so running into
 // the front of a bus from the ground is still a crash, not a teleport onto the roof.
@@ -1558,6 +1570,7 @@ function update(dt) {
       py = ground; vy = 0;
       if (!grounded) {
         grounded = true;
+        ghostT = -1;
         if (queuedSlide) { queuedSlide = false; startSlide(); }
       }
     } else if (grounded && py > ground + 0.05) {
@@ -1565,10 +1578,15 @@ function update(dt) {
     }
     if (grounded && ground >= ROOF_Y - 0.01 && state === 'run') run.roof += dz;
     slideT = Math.max(0, slideT - dt);
+    if (ghostT >= 0) ghostT += dt;
     player.position.set(px, py, 0);
     player.rotation.x = 0;
-    player.rotation.y = state === 'intro' ? Math.PI * (1 - THREE.MathUtils.smoothstep(introT / 1.0, 0, 1)) : 0;
-    player.rotation.z = damp(player.rotation.z, (tx - px) * -0.08, 10, dt);
+    // scooter slide: swing the scooter sideways and lay it over low, Akira style
+    const skid = power.scooter > 0 && slideT > 0;
+    const yaw = skid ? 1.35 : 0;
+    const lean = skid ? 0.5 : (tx - px) * -0.08;
+    player.rotation.y = state === 'intro' ? Math.PI * (1 - THREE.MathUtils.smoothstep(introT / 1.0, 0, 1)) : damp(player.rotation.y, yaw, 14, dt);
+    player.rotation.z = damp(player.rotation.z, lean, skid ? 14 : 10, dt);
   }
 
   // --- timers ---
@@ -1595,6 +1613,8 @@ function update(dt) {
     setAnim(anim);
     const a = actions[currentAnim];
     if (a) a.timeScale = power.scooter > 0 && power.boost <= 0 ? 0.6 : clamp(speed / (ANIM_REF_SPEED[currentAnim] || 14), 0.75, 1.5);
+  } else if (power.scooter > 0 && slideT > 0 && actions[currentAnim]) {
+    actions[currentAnim].timeScale = 0.15; // hold the riding pose through the skid
   }
 
   // --- effects ---
@@ -1690,7 +1710,7 @@ function update(dt) {
     } else {
       m.rotation.y = p.t * 3;
       m.position.y = p.y + Math.sin(p.t * 3) * 0.08;
-      if (state === 'run' && Math.abs(p.z) < 1.0 && Math.abs(p.x - px) < 1.0 && Math.abs((py + 0.9) - p.y) < 1.4) collect(p);
+      if (state === 'run' && Math.abs(p.z) < 1.0 && Math.abs(p.x - px) < 1.0 && (Math.abs((py + 0.9) - p.y) < 1.4 || (ghostT >= 0 && Math.abs((ghostHeight() + 0.9) - p.y) < 1.4))) collect(p);
       else if (p.rizzed && state === 'run' && Math.hypot(p.x - px, p.z) < 2.6) collect(p); // pulled ones get grabbed early
     }
     if (p.z > DESPAWN_Z) recycle(pickups, i, 'p_');
@@ -1804,4 +1824,4 @@ load().then(async () => {
 });
 
 // debug handle for testing in the browser console (local dev only)
-if (['localhost', '127.0.0.1'].includes(location.hostname)) window.__samrun = { player, samInner, camera, scene, act, get state() { return state; }, get speed() { return speed; }, obstacles, pickups, setGod(v) { invulnT = v ? 1e9 : 0; }, give(type) { collect({ type }); }, get run() { return run; }, get missions() { return missions; }, Account, get ground() { return ground; }, get section() { return section; }, forceSection(t) { section = { type: t, left: 300, fresh: true, lead: 5 }; lastSpecial = t; }, get power() { return power; }, get anim() { return currentAnim; }, spawn(type, l, z, vz = 0) { return type === 'mosquito' ? spawnMosquito(z, vz ? 'weave' : 'bob', l) : spawnObstacle(type, LANES[l], z, vz); }, get shield() { return shield; }, set shield(v) { shield = v; }, speedFor, get lane() { return lane; }, get py() { return py; }, ramp(cars = 1) { busWithRamp(lane, -20, cars); }, step(n = 1) { for (let i = 0; i < n; i++) update(1 / 60); renderer.render(scene, camera); } };
+if (['localhost', '127.0.0.1'].includes(location.hostname)) window.__samrun = { player, samInner, camera, scene, act, get state() { return state; }, get speed() { return speed; }, obstacles, pickups, setGod(v) { invulnT = v ? 1e9 : 0; }, give(type) { collect({ type }); }, get run() { return run; }, get missions() { return missions; }, Account, get ground() { return ground; }, get section() { return section; }, forceSection(t) { section = { type: t, left: 300, fresh: true, lead: 5 }; lastSpecial = t; }, get power() { return power; }, get anim() { return currentAnim; }, arc(l, z) { coinArc(l, z); }, spawn(type, l, z, vz = 0) { return type === 'mosquito' ? spawnMosquito(z, vz ? 'weave' : 'bob', l) : spawnObstacle(type, LANES[l], z, vz); }, get shield() { return shield; }, set shield(v) { shield = v; }, speedFor, get lane() { return lane; }, get py() { return py; }, ramp(cars = 1) { busWithRamp(lane, -20, cars); }, step(n = 1) { for (let i = 0; i < n; i++) update(1 / 60); renderer.render(scene, camera); } };
