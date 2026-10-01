@@ -516,6 +516,18 @@ function busWithRamp(laneI, zFront, cars = 1) {
 // head height (slide under them), bobbers stay in a lane and rise and fall (run under them
 // when they're up, jump them when they're low).
 function spawnMosquito(z, kind = Math.random() < 0.55 ? 'weave' : 'bob', laneI = Math.floor(Math.random() * 3)) {
+  // Never share a stretch with a bus or ramp: a weaver would fly through it and pop out of
+  // nowhere. Next to buses only bobbers are allowed, and only in a lane that's open.
+  const blocked = new Set();
+  for (const o of obstacles) {
+    if (!o.dead && (o.type === 'bus' || o.ramp) && Math.abs(o.z - z) < o.len / 2 + 6) blocked.add(LANES.indexOf(o.x));
+  }
+  if (blocked.size) {
+    const free = [0, 1, 2].filter((l) => !blocked.has(l));
+    if (!free.length) return null;
+    kind = 'bob';
+    if (blocked.has(laneI)) laneI = pick(free);
+  }
   const o = spawnObstacle('mosquito', LANES[laneI], z);
   o.kind = kind;
   o.baseX = LANES[laneI];
